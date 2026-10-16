@@ -881,15 +881,18 @@ nonisolated final class Engine: @unchecked Sendable {
                 }
                 let hits = try? searcher?.search(text, queryVector: values, kinds: kinds, limit: limit, depth: depth,
                                                  prefixLast: prefixLast)
-                // Only files that are searched (`FolderSelection`'s rule, as the crawler walks them) and of types not
-                // skipped: a removed folder's rows (or a newly skipped type's) can outlive it until a helper syncs
-                // (indexing was paused, or the app quit first).
-                let (chosen, excluded, types): ([URL], [URL], Set<String>) = lock.withLock {
-                    (self.roots, self.excluded, Set(self.excludedTypes))
+                // Only files that are searched (`FolderSelection`'s rule, as the crawler walks them: the chosen
+                // folders, and the documents in Copilot's) and of types not skipped: a removed folder's rows (or a
+                // newly skipped type's) can outlive it until a helper syncs (indexing was paused, or the app quit
+                // first).
+                let (chosen, excluded, types, copilot): ([URL], [URL], Set<String>, Bool) = lock.withLock {
+                    (self.roots, self.excluded, Set(self.excludedTypes), self.copilotDocuments)
                 }
                 let folders = chosen.map(\.path), skipped = excluded.map(\.path)
+                let documents = AppSettings.documentFolders(copilot: copilot, roots: chosen).map(\.path)
                 continuation.resume(returning: (hits ?? []).filter { hit in
-                    FolderSelection.isSearched(hit.path, folders: folders, skipped: skipped)
+                    FolderSelection.isSearched(file: hit.path, folders: folders, skipped: skipped,
+                                               documentFolders: documents)
                         && !types.contains((hit.path as NSString).pathExtension.lowercased())
                         && FileManager.default.fileExists(atPath: hit.path)
                 })

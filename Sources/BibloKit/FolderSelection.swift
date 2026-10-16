@@ -36,6 +36,16 @@ public struct FolderSelection: Equatable, Sendable {
         }
     }
 
+    /// Whether the file at `path` is searched: it's in a chosen folder, or it's a deck, a Word document or a PDF
+    /// (`Rules.isDocument`) in a folder searched for those only (`IndexOptions.documentOnlyFolders`), as the crawler
+    /// keeps them.
+    public static func isSearched(file path: String, folders: [String], skipped: [String],
+                                  documentFolders: [String]) -> Bool {
+        isSearched(path, folders: folders, skipped: skipped)
+            || (Rules.isDocument((path as NSString).lastPathComponent, options: IndexOptions())
+                && isSearched(path, folders: documentFolders, skipped: skipped))
+    }
+
     /// The closest chosen (or kept) folder that searches `path`.
     public func searchedAs(_ path: String) -> String? {
         (kept + chosen).filter { folder in

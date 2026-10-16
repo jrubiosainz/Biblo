@@ -87,6 +87,23 @@ import Testing
         #expect(!FolderSelection(chosen: ["/a/b"]).isSearched("/a/bc/x"))
     }
 
+    @Test func documentOnlyFoldersSearchTheirDocumentsOnly() {
+        let copilot = ["/H/.copilot/session-state", "/H/.copilot/chats"]
+        func searched(_ path: String, documentFolders: [String] = copilot) -> Bool {
+            FolderSelection.isSearched(file: path, folders: ["/H/Docs"], skipped: ["/H/Docs/Old"],
+                                       documentFolders: documentFolders)
+        }
+        #expect(searched("/H/.copilot/session-state/s1/files/deck/Deck.pptx"))
+        #expect(searched("/H/.copilot/chats/2026-10-16/chat/Report.PDF"))
+        #expect(!searched("/H/.copilot/session-state/s1/files/shot.png"))       // a screenshot, not a document
+        #expect(!searched("/H/.copilot/session-state/s1/files/deck/~$Deck.pptx")) // Office's lock file
+        #expect(!searched("/H/.copilot/logs/Deck.pptx"))                        // not one of its folders
+        #expect(!searched("/H/.copilot/session-state/s1/files/deck/Deck.pptx", documentFolders: []))   // turned off
+        #expect(searched("/H/Docs/notes.txt"))                                  // chosen folders: everything
+        #expect(!searched("/H/Docs/Old/Deck.pptx"))                             // their skips too
+        #expect(!searched("/H/Gone/Deck.pptx"))                                 // a folder that's no longer chosen
+    }
+
     @Test func crawlsLeaveSkipsOutButWalkChosenFoldersInsideThem() throws {
         let downloads = folder.appendingPathComponent("D")
         let courses = downloads.appendingPathComponent("Media/Courses")
