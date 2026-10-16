@@ -19,8 +19,9 @@ let usage = """
                                               "code: <words>" searches the code index
       biblo status                            what's in the index
       biblo eval <queries.json> [-n 10]       recall of known answers (see evals/; "code: …" queries search code)
-      biblo index-service <folder>... [--code-root DIR]... [--code-exclude DIR]... [--backfill] [--prune]
-                          [--sync WHAT]       the app's indexing helper (JSON lines; see IndexService)
+      biblo index-service <folder>... [--docs-only DIR]... [--code-root DIR]... [--code-exclude DIR]... [--backfill]
+                          [--prune] [--sync WHAT]
+                                              the app's indexing helper (JSON lines; see IndexService)
       biblo worker [--text-only]              the model as a process (JSON lines; the app's query encoder)
 
     Options:
@@ -32,6 +33,8 @@ let usage = """
       --include-datasets   don't skip folders that look like datasets
       --exclude DIR        don't index this folder (repeatable)
       --exclude-ext EXT    don't index files with this extension (repeatable, or comma-separated: "heic,txt")
+      --docs-only DIR      also walk this folder, for its PDFs and Office documents only (repeatable; the app
+                           passes Copilot's folders in ~/.copilot, where the Copilot app and CLI save what they make)
       --reindex            drop vectors and embed everything again (after changing settings or model)
       --sync WHAT          which syncs index-service starts with: main, code, main,code (default) or none
       --zgate Z            how far a meaning match must stand out (default 2.0)
@@ -58,7 +61,7 @@ struct Arguments {
     var flags: Set<String> = []
     static let valued: Set<String> = ["--index", "--limit", "--kind", "-n", "--zgate", "--depth", "--word-weight",
                                       "--new-limit", "--linger", "--shot-tokens", "--code-stretch", "--sync"]
-    static let repeated: Set<String> = ["--exclude", "--exclude-ext", "--code-root", "--code-exclude"]
+    static let repeated: Set<String> = ["--exclude", "--exclude-ext", "--code-root", "--code-exclude", "--docs-only"]
 
     init(_ raw: ArraySlice<String>) throws {
         var index = raw.startIndex
@@ -101,14 +104,19 @@ struct Arguments {
         options.includeDatasets = flags.contains("--include-datasets")
         options.excludedFolders = (lists["--exclude"] ?? []).map { Self.folderURL($0).path }
         options.excludedExtensions = IndexOptions.extensions((lists["--exclude-ext"] ?? []).joined(separator: ","))
+        options.documentOnlyFolders = code ? [] : documentFolders.map(\.path)
         if let tokens = values["--shot-tokens"].flatMap(Int.init) { options.screenshotBudget = tokens }
         if let characters = values["--code-stretch"].flatMap(Int.init) { options.codeStretch = characters }
         return options
     }
 
+    /// `--docs-only`: folders walked for their PDFs and Office documents only, after the others.
+    var documentFolders: [URL] { (lists["--docs-only"] ?? []).map(Self.folderURL) }
+
     func folders() throws -> [URL] {
-        guard !positional.isEmpty else { throw CLIError("which folders? e.g. biblo index ~/BibloTestbed") }
-        return try positional.map {
+        let given = positional + (lists["--docs-only"] ?? [])
+        guard !given.isEmpty else { throw CLIError("which folders? e.g. biblo index ~/BibloTestbed") }
+        return try given.map {
             let url = Self.folderURL($0)
             guard Self.isFolder(url) else { throw CLIError("not a folder: \($0)") }
             guard Self.isReadable(url) else { throw CLIError("can't read \($0) (macOS privacy settings?)") }
@@ -205,10 +213,11 @@ func embedderSource() -> String? {
 }
 
 func estimate(_ args: Arguments) throws {
-    guard !args.positional.isEmpty else { throw CLIError("which folders? e.g. biblo estimate ~/Documents") }
+    let folders = args.positional.map(Arguments.folderURL) + args.documentFolders
+    guard !folders.isEmpty else { throw CLIError("which folders? e.g. biblo estimate ~/Documents") }
     let options = args.options
     var total = 0.0
-    for folder in args.positional.map(Arguments.folderURL) {
+    for folder in folders {
         // One folder that isn't there or can't be read (a denied privacy prompt) mustn't sink the others.
         guard Arguments.isFolder(folder), Arguments.isReadable(folder) else {
             if args.flags.contains("--json") {
@@ -278,7 +287,7 @@ func estimate(_ args: Arguments) throws {
         }
         print(String(format: "  (looked at it in %.2f s)", Date().timeIntervalSince(started)))
     }
-    if args.positional.count > 1, !args.flags.contains("--json") { print("all together ≈ \(duration(total))") }
+    if folders.count > 1, !args.flags.contains("--json") { print("all together ≈ \(duration(total))") }
 }
 
 func index(_ args: Arguments) throws {
@@ -430,10 +439,11 @@ func indexService(_ args: Arguments) throws -> Int32 {
     }
     var codeOptions = args.options
     codeOptions.code = true
+    codeOptions.documentOnlyFolders = []
     codeOptions.excludedFolders = (args.lists["--code-exclude"] ?? []).map { Arguments.folderURL($0).path }
     let codeRoots = (args.lists["--code-root"] ?? []).map(Arguments.folderURL)
     let service = IndexService(main: try part(IndexStore.mainFile, options: args.options,
-                                              roots: args.positional.map(Arguments.folderURL)),
+                                              roots: args.positional.map(Arguments.folderURL) + args.documentFolders),
                                code: codeRoots.isEmpty ? nil : try part(IndexStore.codeFile, options: codeOptions,
                                                                         roots: codeRoots),
                                model: model,

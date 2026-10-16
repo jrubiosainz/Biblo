@@ -15,6 +15,10 @@ import Foundation
 ///
 /// Demo mode (`demoMode`, switched in Settings → General) swaps the folders for the sample files (`DemoFiles`) and the
 /// index for one of their own, next to the real one; the saved folders stay as they were, untouched until it's off.
+///
+/// `copilotDocuments` (Settings → Folders) also searches the decks, Word documents and PDFs GitHub Copilot makes in the
+/// hidden ~/.copilot. It's on by default, but off with `-defaultsSuite` unless `-copilotDocuments YES` turns it on, so
+/// a test run never reads it.
 nonisolated struct AppSettings: Sendable {
     var roots: [URL]
     /// Folders inside the roots that are never indexed.
@@ -43,6 +47,8 @@ nonisolated struct AppSettings: Sendable {
     var codeQuietSeconds: Double
     /// Searching the sample files instead of your folders (`demo`).
     var demoMode: Bool
+    /// Documents made with GitHub Copilot are searched too (`documentFolders`).
+    var copilotDocuments: Bool
 
     static let supportDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/Biblo")
@@ -84,7 +90,10 @@ nonisolated struct AppSettings: Sendable {
             codeEditor: defaults.string(forKey: "codeEditor"),
             codeQuietSeconds: defaults.object(forKey: "codeQuietSeconds") == nil
                 ? 60 : max(1, defaults.double(forKey: "codeQuietSeconds")),
-            demoMode: demo)
+            demoMode: demo,
+            copilotDocuments: !demo && (defaults.object(forKey: "copilotDocuments") == nil
+                ? UserDefaults.standard.string(forKey: "defaultsSuite") == nil
+                : defaults.bool(forKey: "copilotDocuments")))
         if demo {
             // The samples' code goes to the code index only, as code in a chosen folder would.
             settings.roots = [DemoFiles.folder]
@@ -154,6 +163,29 @@ nonisolated struct AppSettings: Sendable {
     /// For the next launch (`demo`).
     static func save(demoMode: Bool) {
         defaults.set(demoMode, forKey: "demoMode")
+    }
+
+    static func save(copilotDocuments: Bool) {
+        guard !demo else { return }
+        defaults.set(copilotDocuments, forKey: "copilotDocuments")
+    }
+
+    /// Where GitHub Copilot (the app and the CLI) saves what it makes: each session's files, and each chat's.
+    static let copilotFolders = ["~/.copilot/session-state", "~/.copilot/chats"].map(folderURL)
+
+    /// The folders searched for their decks, Word documents and PDFs only (`IndexOptions.documentOnlyFolders`): the
+    /// Copilot folders that are there, when `copilot` is on and no chosen folder searches them already. A hidden
+    /// folder isn't walked, so a chosen home folder doesn't. None before folders are chosen (a fresh install reads
+    /// nothing) or in demo mode.
+    static func documentFolders(copilot: Bool, roots: [URL]) -> [URL] {
+        guard copilot, !demo, !roots.isEmpty else { return [] }
+        return copilotFolders.filter { folder in
+            isFolder(folder) && !roots.contains { root in
+                guard folder.path != root.path else { return true }
+                guard FolderSelection.isInside(folder.path, root.path) else { return false }
+                return !folder.path.dropFirst(root.path.count).split(separator: "/").contains { $0.hasPrefix(".") }
+            }
+        }
     }
 
     /// Expands "~" and resolves symlinks, so crawled paths match the paths FSEvents reports.

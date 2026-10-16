@@ -347,4 +347,32 @@ import UniformTypeIdentifiers
             #expect(watcher.concerns(downloaded(real(folder.path) + "/Desktop/hero.png")))
         }
     }
+
+    @Test func documentsOnlyFoldersCareForDocuments() {
+        // The Copilot app's sessions, in a hidden folder: hidden above the chosen folder doesn't count.
+        let copilot = "/Volumes/BibloTest/.copilot/session-state"
+        let made = copilot + "/f27ca06e/files"
+        var options = IndexOptions()
+        options.documentOnlyFolders = [copilot]
+        var watcher = ChangeFilter(roots: [root, copilot], options: options,
+                                   inTheCloud: { $0.hasSuffix("/Online only.pdf") })
+        #expect(watcher.concerns(file(made + "/Q3 review.pptx", created, modified)))
+        #expect(watcher.concerns(file(made + "/Brief.docx", modified)))
+        #expect(!watcher.concerns(file(made + "/~$Brief.docx", created, removed)))   // Word's lock while it's open
+        #expect(!watcher.concerns(file(made + "/chart.png", created)))
+        #expect(!watcher.concerns(file(copilot + "/f27ca06e/events.jsonl", modified)))   // the app writes it all day
+        #expect(!watcher.concerns(file(made + "/Online only.pdf", modified)))
+        #expect(!watcher.concerns(folder(made + "/render", created)))   // its files bring their own events
+        #expect(watcher.concerns(folder(made + "/render", renamed)))   // its documents moved with it
+        #expect(watcher.concerns(file(made + "/app/package.json", created)))   // what's kept around it changes
+        #expect(watcher.concerns(file(made + "/app/out/Launch.pptx", created)))   // a project's documents count here
+        #expect(watcher.concerns(file(root + "/chart.png", created)))   // the other folders keep their rules
+        watcher.setProjects([made + "/app"])   // one with too many documents to keep any
+        #expect(!watcher.concerns(file(made + "/app/docs/Spec.pdf", created)))   // one more changes nothing
+        #expect(!watcher.concerns(folder(made + "/app/assets", created)))
+        #expect(!watcher.concerns(file(made + "/app/build/main.js", removed)))
+        #expect(watcher.concerns(file(made + "/app/docs/Spec.pdf", removed)))   // fewer may be few enough
+        #expect(watcher.concerns(folder(made + "/app/assets", renamed)))   // its documents went with it
+        #expect(watcher.concerns(file(made + "/app/package.json", removed)))   // a project no longer
+    }
 }

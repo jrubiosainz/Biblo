@@ -84,9 +84,16 @@ Solo las carpetas que eliges:
 
 Fuera de las carpetas que eliges para la búsqueda de código no lee código, y dentro de un proyecto (una carpeta con
 `.git`, `package.json` y similares) solo lee las capturas. Nunca lee claves, certificados, archivos de contraseñas,
-carpetas ocultas como `~/.ssh`, paquetes de apps ni cachés. Se salta las carpetas que parecen datasets y nunca descarga
-archivos que solo están en la nube (iCloud, OneDrive y otros proveedores de archivos): para que entren, márcalos para
-tenerlos siempre en el Mac. En Settings → Folders puedes saltarte más carpetas o tipos de archivo.
+carpetas ocultas como `~/.ssh`, paquetes de apps, cachés ni los archivos temporales de Office (`~$…`). Se salta las
+carpetas que parecen datasets y nunca descarga archivos que solo están en la nube (iCloud, OneDrive y otros proveedores
+de archivos): para que entren, márcalos para tenerlos siempre en el Mac. En Settings → Folders puedes saltarte más
+carpetas o tipos de archivo.
+
+Lo que crea GitHub Copilot entra aunque no elijas su carpeta. La app y la CLI de Copilot guardan su trabajo en
+`~/.copilot`, una carpeta oculta que Spotlight tampoco indexa, y de ella Biblo solo lee las presentaciones, los
+documentos y los PDF (pptx, docx, doc, odt, rtf y pdf) de `session-state` y `chats`. También los de un proyecto que
+Copilot montó para hacerlos, salvo que tenga más de 30: entonces son datos de prueba, como un corpus o una licencia en
+40 idiomas, y no lo que hiciste. Se apaga en Settings → Folders → Documents made with GitHub Copilot.
 
 El primer pase tarda unos minutos con unos cientos de archivos y puede llegar a una hora con una carpeta de Descargas
 grande. Ocurre una sola vez, también con batería salvo que le pidas esperar al cargador, y se pausa en modo de bajo
@@ -195,6 +202,10 @@ solo cubren inglés, bengalí y árabe, y Google advierte que el modelo no rinde
 límites que afectan a las palabras exactas, no al significado: dentro de las capturas las lee el reconocimiento de
 texto de Apple, que conoce unos 25 idiomas, y los idiomas que se escriben sin espacios, como el chino, el japonés o el
 tailandés, no se dividen en palabras.
+
+**¿Por qué no encuentra un archivo?** Comprueba que está en una de tus carpetas, que está descargado en el Mac y que no
+está dentro de un proyecto de código, donde solo cuentan las capturas. Un archivo cifrado, con una etiqueta de
+confidencialidad (Microsoft Purview) o una contraseña, no se puede leer: Biblo lo encuentra solo por su nombre.
 
 **¿Cómo lo quito?** Ciérralo y borra `Biblo.app`, `~/Library/Application Support/Biblo` (el modelo y los índices) y
 `~/Library/Preferences/com.jrubiosainz.Biblo.plist` (los ajustes).

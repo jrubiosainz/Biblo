@@ -181,9 +181,20 @@ public final class Searcher {
         let zGate = topZ >= zGate ? min(zGate, max(zGate - depth, topZ - 1)) : zGate
         var candidates = Set(best.filter { $0.value.z >= zGate }.keys)
         for (file, share) in coverage where share >= 0.5 { candidates.insert(file) }
+        // A file that can't be read (encrypted by a sensitivity label, empty, not indexed yet) has no meaning to score,
+        // only the words of its name, and every meaning match outranked it. A name with all of the query's words stands
+        // in for a meaning match just under the best one, at the gate at least, never over the best (2026-10-16: the
+        // encrypted "citadel-explicado.pptx" was 16th of the documents for "citadel explicado", under every file that
+        // mentions Citadel; now 3rd, after the two that explain it in their text).
+        var standIn: [Int64: Double] = [:]
+        if topZ.isFinite {
+            let unread = candidates.filter { best[$0] == nil && (coverage[$0] ?? 0) > 0.999 }
+            for file in try named(unread, patterns: patterns) { standIn[file] = min(topZ, max(zGate, topZ - 1)) }
+        }
         var scored: [Int64: Double] = [:]
         for file in candidates {
-            var score = meaningWeight * max(best[file]?.z ?? 0, 0) + wordsWeight * pow(coverage[file] ?? 0, 1.5)
+            let z = best[file]?.z ?? standIn[file] ?? 0
+            var score = meaningWeight * max(z, 0) + wordsWeight * pow(coverage[file] ?? 0, 1.5)
             if let kind = fileKind[file], hinted.contains(kind) { score += 1 }
             scored[file] = score
         }
@@ -245,6 +256,20 @@ public final class Searcher {
                                   focus: focus, byMeaning: semantic.map { $0.z >= zGate } ?? false))
         }
         return hits
+    }
+
+    /// Which of `files` have every one of `patterns` in their own name (the folders' names don't count).
+    private func named(_ files: Set<Int64>, patterns: [String]) throws -> Set<Int64> {
+        guard !files.isEmpty, !patterns.isEmpty else { return [] }
+        let list = files.map(String.init).joined(separator: ",")
+        var found: [Int64: Int] = [:]
+        for pattern in patterns {
+            try store.db.query("""
+                SELECT DISTINCT s.file FROM fts JOIN segments s ON s.id = fts.rowid
+                WHERE fts MATCH ? AND s.kind = ? AND s.file IN (\(list))
+                """, [.text("name : (\(pattern))"), .text(SegmentKind.name.rawValue)]) { found[$0.int(0), default: 0] += 1 }
+        }
+        return Set(found.filter { $0.value == patterns.count }.keys)
     }
 
     /// Code: the stretch to point at, and the line in it to open at. A name looked up points at the stretch that

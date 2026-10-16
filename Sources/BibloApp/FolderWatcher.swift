@@ -48,9 +48,13 @@ nonisolated final class FolderWatcher: @unchecked Sendable {
     func setProjects(_ projects: [String]) { filter.setProjects(projects) }
 
     fileprivate func received(_ changes: [FileChange]) {
-        // A project's .git going is noticed (what's around it is indexed again), not what changes inside it.
+        // Hidden below the chosen folder it's in (one may be inside a hidden folder: Copilot's, in ~/.copilot). A
+        // project's .git going is noticed (what's around it is indexed again), not what changes inside it.
         let visible = changes.filter { change in
-            let names = change.path.split(separator: "/")
+            let path = change.path
+            let root = roots.filter { path == $0 || FolderSelection.isInside(path, $0) }.max { $0.count < $1.count }
+            let below = root.map { path.dropFirst($0.hasSuffix("/") ? $0.count : $0.count + 1) } ?? Substring(path)
+            let names = below.split(separator: "/")
             return !names.enumerated().contains { $1.hasPrefix(".") && ($0 < names.count - 1 || $1 != ".git") }
         }
         // The filter before the package check: it hardly touches the disk (thousands of files a minute, downloading).

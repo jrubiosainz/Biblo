@@ -67,6 +67,10 @@ public struct IndexOptions: Sendable {
     public var audioHop = 25.0
     public var excludedFolders: [String] = []
     public var excludedExtensions: Set<String> = []
+    /// Chosen folders where only PDFs and Office documents count (`Rules.isDocument`): the app's ~/.copilot folders,
+    /// where the Copilot app and CLI save the decks and documents they make, among their own logs, databases and
+    /// screenshots.
+    public var documentOnlyFolders: [String] = []
 
     public init() {}
 

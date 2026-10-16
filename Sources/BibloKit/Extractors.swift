@@ -17,7 +17,7 @@ enum ExtractError: Error, CustomStringConvertible {
         switch self {
         case .unreadable(let why): "unreadable: \(why)"
         case .tooSmall(let width, let height): "small image \(width)×\(height)"
-        case .locked: "password-protected"
+        case .locked: "encrypted (a sensitivity label or a password)"
         case .empty(let why): why
         case .leftOut(let why): why
         }
@@ -189,6 +189,13 @@ enum DocExtractor {
         case "html", "htm": return plainText(fromHTML: try readText(url))
         default: return try readText(url)
         }
+        // Cocoa says only that these "couldn't be opened".
+        let handle = try FileHandle(forReadingFrom: url)
+        let head = try handle.read(upToCount: 4) ?? Data()
+        try? handle.close()
+        if head.isEmpty { throw ExtractError.empty("empty file") }
+        // An encrypted Word document (a sensitivity label, a password) is an OLE file holding the encrypted package.
+        if ext == "docx", head == Data([0xD0, 0xCF, 0x11, 0xE0]) { throw ExtractError.locked }
         return try NSAttributedString(url: url, options: [.documentType: type], documentAttributes: nil).string
     }
 

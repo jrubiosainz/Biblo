@@ -210,8 +210,9 @@ struct ZipReader {
 
     init(_ url: URL) throws {
         let bytes = try Data(contentsOf: url, options: .mappedIfSafe)
-        // A password-protected Office document is an OLE file holding the encrypted zip.
+        // A password-protected or labelled Office document is an OLE file holding the encrypted zip.
         if bytes.prefix(4) == Data([0xD0, 0xCF, 0x11, 0xE0]) { throw ExtractError.locked }
+        if bytes.isEmpty { throw ExtractError.empty("empty file") }
         self.bytes = bytes
         // The central directory's end record: 22 bytes, then a comment of up to 64 KB.
         var end: Int?

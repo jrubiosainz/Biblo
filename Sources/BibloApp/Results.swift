@@ -103,7 +103,7 @@ struct ResultRow: Identifiable, Equatable {
 
     /// Why it's here, in a few words: "Matches the picture", "Matches the frame at 0:06".
     var reason: String {
-        guard matchedMeaning else { return matchedWords ? "Has your words" : "Matches its name" }
+        guard matchedMeaning else { return matchedWords && segment != .name ? "Has your words" : "Matches its name" }
         let place = loc.map(Self.clock) ?? ""
         let page = loc.map { "page \(Int($0))" } ?? "a page"
         switch segment {
@@ -315,7 +315,7 @@ extension ResultRow {
 
     /// `reason`, as the panel says it: "Por el fotograma de 0:06".
     var spanishReason: String {
-        guard matchedMeaning else { return matchedWords ? "Tiene tus palabras" : "Por su nombre" }
+        guard matchedMeaning else { return matchedWords && segment != .name ? "Tiene tus palabras" : "Por su nombre" }
         let place = loc.map(Self.clock) ?? ""
         let page = loc.map { "la página \(Int($0))" } ?? "una página"
         switch segment {

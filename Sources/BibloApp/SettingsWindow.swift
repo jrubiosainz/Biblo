@@ -122,6 +122,8 @@ final class SettingsState {
     var tab = SettingsTab.general
     private(set) var summaries: [Engine.RootSummary]?
     private(set) var codeSummaries: [Engine.RootSummary] = []
+    /// What's indexed of the documents Copilot made; nil while they aren't searched.
+    private(set) var copilotSummary: Engine.RootSummary?
     private(set) var indexSize: Int64 = 0
     private(set) var codeIndexSize: Int64 = 0
     var launchAtLogin = false
@@ -151,6 +153,7 @@ final class SettingsState {
         indexSize = app.engine.indexSize
         codeIndexSize = app.engine.codeIndexSize
         codeSummaries = await app.engine.rootSummaries(code: true)
+        copilotSummary = await app.engine.copilotSummary()
         summaries = await app.engine.rootSummaries()
     }
 
@@ -393,6 +396,22 @@ private struct FolderSettings: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Section {
+                Toggle(isOn: Binding(get: { state.model.settings.copilotDocuments },
+                                     set: { on in
+                                         state.app.setCopilotDocuments(on)
+                                         Task { await state.refresh() }
+                                     })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Documents made with GitHub Copilot")
+                        Text(copilotDetail)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .disabled(AppSettings.demo)
+            }
+            Section {
                 Toggle(isOn: Binding(get: { state.model.settings.indexOnBattery },
                                      set: { state.app.setIndexOnBattery($0) })) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -422,6 +441,16 @@ private struct FolderSettings: View {
 
     private var removalTitle: String {
         "Stop searching “\(removing.map { ($0.path as NSString).lastPathComponent } ?? "")”?"
+    }
+
+    /// What the Copilot switch reads, and how many it found once it's on.
+    private var copilotDetail: String {
+        let what = "Decks, Word documents and PDFs that the Copilot app and CLI save in ~/.copilot. Nothing else there "
+            + "is read."
+        guard state.model.settings.copilotDocuments, let summary = state.copilotSummary, summary.files > 0 else {
+            return what
+        }
+        return what + " \(summary.files.formatted()) found."
     }
 }
 

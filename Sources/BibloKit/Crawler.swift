@@ -16,8 +16,10 @@ public struct CrawlReport: Sendable {
     public var skipped: [String: Int] = [:]          // reason → files
     public var skippedFolders: [String: Int] = [:]   // reason → folders not walked into
     public var datasets: [String: Int] = [:]         // folder → files skipped as a dataset
-    /// The code projects found (not for the code index), outermost only: what's inside one is in a project too. The
-    /// app's watcher leaves out what changes inside them that a walk wouldn't keep (`ChangeFilter.setProjects`).
+    /// The code projects found (not for the code index), outermost only: what's inside one is in a project too. In a
+    /// documents-only folder only those with too many documents (`Rules.projectDocumentLimit`); the others count as any
+    /// folder there. The app's watcher leaves out what changes inside them that a walk wouldn't keep
+    /// (`ChangeFilter.setProjects`).
     public var projectRoots: [String] = []
 }
 
@@ -36,25 +38,32 @@ public enum Crawler {
         var repos = GitRepos()
         var found: [Candidate] = []
         var foundPaths = Set<String>()   // a folder inside another root would be walked twice
+        var documentPaths = Set<String>()      // found in documents-only folders
+        var documentProjects = Set<String>()   // the code projects in them
         let rootPaths = Set(roots.map { $0.standardizedFileURL.path })
 
         for root in roots.map({ $0.standardizedFileURL }) {
+            // The walk reports real paths (/private/var, where the root says /var).
+            let real = FolderSelection.realPath(root.path)
+            // A documents-only folder keeps its decks, Word documents and PDFs, nothing else.
+            let documentsOnly = options.documentOnlyFolders.contains { $0 == root.path || $0 == real }
             if options.code {
                 repos.enterRoot(root.path)
-            } else if Rules.isProjectRoot(root.path) {
+            } else if !documentsOnly, Rules.isProjectRoot(root.path) {
                 projectRoots.insert(root.path)
             }
             // A skip applies inside the chosen folders that contain it: a folder chosen inside a skipped one is
-            // walked whole (`FolderSelection`). The walk reports real paths (/private/var, where the root says /var).
-            let real = FolderSelection.realPath(root.path)
+            // walked whole (`FolderSelection`).
             let skips = options.excludedFolders.filter {
                 FolderSelection.isInside($0, root.path) || FolderSelection.isInside($0, real)
             }.flatMap { [$0, FolderSelection.realPath($0)] }
-            guard let walker = fm.enumerator(at: root, includingPropertiesForKeys: keys,
+            // There, a file's type is asked only of documents: most files are other things, and asking costs.
+            let walkKeys = documentsOnly ? [.isDirectoryKey, .isPackageKey] : keys
+            guard let walker = fm.enumerator(at: root, includingPropertiesForKeys: walkKeys,
                                              options: [.skipsHiddenFiles, .skipsPackageDescendants],
                                              errorHandler: { _, _ in true }) else { continue }
             func visit(_ url: URL) {
-                let values = try? url.resourceValues(forKeys: Set(keys))
+                let values = try? url.resourceValues(forKeys: Set(walkKeys))
                 if values?.isDirectory == true, values?.isPackage != true {
                     if let reason = Rules.skipReason(forFolder: url, home: home, excluded: skips, code: options.code)
                         ?? (options.code ? Rules.codeSkipReason(forFolder: url) : nil) {
@@ -64,6 +73,7 @@ public enum Crawler {
                         repos.enter(url.path)
                     } else if Rules.isProjectRoot(url.path) {
                         projectRoots.insert(url.path)
+                        if documentsOnly { documentProjects.insert(url.path) }
                     }
                     return
                 }
@@ -71,8 +81,14 @@ public enum Crawler {
                     report.skipped["app or bundle", default: 0] += 1
                     return
                 }
+                if documentsOnly, !Rules.isDocument(url.lastPathComponent, options: options) {
+                    report.skipped["not a document (documents-only folder)", default: 0] += 1
+                    return
+                }
+                let type = documentsOnly ? (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType
+                    : values?.contentType
                 let classification = options.code ? Rules.classifyCode(url, options: options)
-                    : Rules.classify(url, type: values?.contentType, options: options)
+                    : Rules.classify(url, type: type, options: options)
                 switch classification {
                 case .ignore:
                     report.skipped["other type", default: 0] += 1
@@ -105,6 +121,7 @@ public enum Crawler {
                         }
                     }
                     guard foundPaths.insert(url.path).inserted else { return }
+                    if documentsOnly { documentPaths.insert(url.path) }
                     let mtime = Double(info.st_mtimespec.tv_sec) + Double(info.st_mtimespec.tv_nsec) / 1e9
                     found.append(Candidate(path: url.path, kind: kind, size: Int64(info.st_size), mtime: mtime,
                                            inode: UInt64(info.st_ino), device: UInt64(bitPattern: Int64(info.st_dev))))
@@ -120,27 +137,47 @@ public enum Crawler {
             }
         }
 
-        // Inside a code project only screenshots count (assets, fixtures and datasets don't).
-        var inProject: [String: Bool] = [:]
-        func isInProject(_ folder: String) -> Bool {
-            if let known = inProject[folder] { return known }
+        // The outermost code project a folder is in, if any.
+        var projectOf: [String: String] = [:]   // "" for none
+        func project(of folder: String) -> String? {
+            if let known = projectOf[folder] { return known.isEmpty ? nil : known }
             let parent = (folder as NSString).deletingLastPathComponent
-            let answer = projectRoots.contains(folder) || (parent != folder && parent.count > 1 && isInProject(parent))
-            inProject[folder] = answer
+            let above = parent != folder && parent.count > 1 ? project(of: parent) : nil
+            let answer = above ?? (projectRoots.contains(folder) ? folder : nil)
+            projectOf[folder] = answer ?? ""
             return answer
         }
+        // In a documents-only folder a project's documents count, unless it has too many to be what was made there.
+        var documentsIn: [String: Int] = [:]
+        for path in documentPaths {
+            if let project = project(of: (path as NSString).deletingLastPathComponent) {
+                documentsIn[project, default: 0] += 1
+            }
+        }
+        let crowded = Set(documentsIn.filter { $0.value > Rules.projectDocumentLimit }.keys)
+        // Elsewhere, inside a code project only screenshots count (assets, fixtures and datasets don't).
         var kept: [Candidate] = []
         for file in found {
-            if !options.code, file.kind != .screenshot, isInProject((file.path as NSString).deletingLastPathComponent) {
+            let folder = (file.path as NSString).deletingLastPathComponent
+            if documentPaths.contains(file.path) {
+                if let project = project(of: folder), crowded.contains(project) {
+                    report.skipped["in a code project with too many documents", default: 0] += 1
+                } else {
+                    kept.append(file)
+                }
+            } else if !options.code, file.kind != .screenshot, project(of: folder) != nil {
                 report.skipped["inside a code project", default: 0] += 1
             } else {
                 kept.append(file)
             }
         }
-        report.projectRoots = projectRoots.filter { folder in
+        // The watcher leaves out what a walk wouldn't keep: a documents-only folder's projects count as any folder
+        // there, bar the crowded ones.
+        let reported = projectRoots.subtracting(documentProjects.subtracting(crowded))
+        report.projectRoots = reported.filter { folder in
             var parent = (folder as NSString).deletingLastPathComponent
             while parent.count > 1 {
-                if projectRoots.contains(parent) { return false }
+                if reported.contains(parent) { return false }
                 parent = (parent as NSString).deletingLastPathComponent
             }
             return true

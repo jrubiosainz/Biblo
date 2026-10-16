@@ -26,6 +26,12 @@ public enum Rules {
     static let projectBundleExtensions: Set<String> = ["xcodeproj", "xcworkspace"]
 
     static let docExtensions: Set<String> = ["txt", "text", "md", "markdown", "rtf", "docx", "doc", "odt", "pptx", "html", "htm"]
+    /// What a documents-only folder keeps (`IndexOptions.documentOnlyFolders`): decks, Word documents and PDFs.
+    static let documentExtensions: Set<String> = ["pptx", "docx", "doc", "odt", "rtf", "pdf"]
+    /// There, a code project is mostly where its documents were made (a deck's script and its package.json, next to
+    /// the deck); one with more than this holds a test corpus, a cloned repo's fixtures or an unpacked app's licences
+    /// in 40 languages instead, and none of its documents is kept (`Crawler`).
+    static let projectDocumentLimit = 30
 
     /// Source code and data files: off by default (your editor and ripgrep search them better, and they flood an index).
     static let codeExtensions: Set<String> = [
@@ -95,7 +101,7 @@ public enum Rules {
     /// False only when it surely isn't.
     static func mayBeIndexed(_ name: String, options: IndexOptions) -> Bool {
         let ext = (name as NSString).pathExtension.lowercased()
-        if options.excludedExtensions.contains(ext) { return false }
+        if options.excludedExtensions.contains(ext) || isLockFile(name) { return false }
         if ext == "ts" || ext == "mts" || ext == "m2ts" || docExtensions.contains(ext) { return true }
         if codeExtensions.contains(ext) { return options.includeCode }
         guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return false }
@@ -115,6 +121,17 @@ public enum Rules {
         guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return false }
         return type.conforms(to: .image) && !type.conforms(to: .sourceCode) && !type.conforms(to: .script)
             && !type.conforms(to: .pdf)
+    }
+
+    /// Whether a file of this name is a deck, a Word document or a PDF: what a documents-only folder keeps.
+    static func isDocument(_ name: String, options: IndexOptions) -> Bool {
+        let ext = (name as NSString).pathExtension.lowercased()
+        return documentExtensions.contains(ext) && !options.excludedExtensions.contains(ext) && !isLockFile(name)
+    }
+
+    /// "~$Deck.pptx": the lock file Office keeps next to a document while it's open (a few bytes: who has it open).
+    static func isLockFile(_ name: String) -> Bool {
+        name.hasPrefix("~$")
     }
 
     /// A file or bundle that makes its folder a code project (`isProjectRoot`).
@@ -153,6 +170,7 @@ public enum Rules {
     public static func classify(_ url: URL, type: UTType?, options: IndexOptions) -> Classification {
         let ext = url.pathExtension.lowercased()
         if options.excludedExtensions.contains(ext) { return .skip("excluded type") }
+        if isLockFile(url.lastPathComponent) { return .skip("Office lock file") }
         // .ts / .mts are usually TypeScript, which Spotlight calls MPEG-2 video. Only a real transport stream is video.
         if ext == "ts" || ext == "mts" || ext == "m2ts" {
             if isMPEGTransportStream(url) { return .index(.video) }

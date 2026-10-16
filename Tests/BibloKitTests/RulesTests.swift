@@ -138,4 +138,71 @@ import Testing
         let report = Crawler.crawl([folder, inner], options: IndexOptions())
         #expect(report.candidates.map { ($0.path as NSString).lastPathComponent } == ["trip.txt"])
     }
+
+    @Test func officeLockFilesAreLeftOut() throws {
+        let lock = folder.appendingPathComponent("~$Q3 review.pptx")
+        try Data("jesus rubio".utf8).write(to: lock)
+        #expect(Rules.classify(lock, type: .init(filenameExtension: "pptx"), options: IndexOptions())
+                == .skip("Office lock file"))
+        #expect(!Rules.mayBeIndexed("~$Q3 review.pptx", options: IndexOptions()))
+        #expect(Rules.mayBeIndexed("Q3 review.pptx", options: IndexOptions()))
+    }
+
+    @Test func documentsAreDecksWordDocumentsAndPDFs() {
+        let documents = ["Q3 review.pptx", "Brief.docx", "Old brief.doc", "Contract.PDF", "Notes.rtf", "Draft.odt"]
+        let others = ["~$Brief.docx", "chart.png", "README.md", "events.jsonl", "Budget.xlsx", "main.swift", "Deck"]
+        #expect(documents.filter { !Rules.isDocument($0, options: IndexOptions()) } == [])
+        #expect(others.filter { Rules.isDocument($0, options: IndexOptions()) } == [])
+        var noPDFs = IndexOptions()
+        noPDFs.excludedExtensions = IndexOptions.extensions("pdf")
+        #expect(!Rules.isDocument("Contract.pdf", options: noPDFs))
+    }
+
+    @Test func documentsOnlyFolderKeepsOnlyDocuments() throws {
+        // As the Copilot app leaves a session: what it made, its own files, and the project it made a deck with.
+        let made = folder.appendingPathComponent("session/files")
+        let project = folder.appendingPathComponent("session/deck")
+        try FileManager.default.createDirectory(at: made, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: project.appendingPathComponent("out"),
+                                                withIntermediateDirectories: true)
+        for name in ["Q3 review.pptx", "Brief.docx", "Contract.pdf", "~$Brief.docx", "chart.png", "notes.md",
+                     "events.jsonl"] {
+            try Data("x".utf8).write(to: made.appendingPathComponent(name))
+        }
+        try Data("{}".utf8).write(to: project.appendingPathComponent("package.json"))
+        try Data("x".utf8).write(to: project.appendingPathComponent("out/Launch.pptx"))
+        var options = IndexOptions()
+        options.documentOnlyFolders = [folder.path]
+        let report = Crawler.crawl([folder], options: options)
+        #expect(report.candidates.map { ($0.path as NSString).lastPathComponent }.sorted()
+                == ["Brief.docx", "Contract.pdf", "Launch.pptx", "Q3 review.pptx"])
+        #expect(report.projectRoots.isEmpty)   // it counts as any folder there: the watcher mustn't leave it out
+        #expect(report.skipped["not a document (documents-only folder)"] == 5)
+        // Chosen as any other folder, it keeps the rest too.
+        let whole = Crawler.crawl([folder], options: IndexOptions())
+        #expect(whole.candidates.contains { $0.path.hasSuffix("/notes.md") })
+    }
+
+    @Test func documentsOnlyFolderLeavesOutCrowdedProjects() throws {
+        // A repo cloned in a session, with the test corpus it makes: more documents than anyone made there.
+        let made = folder.appendingPathComponent("session/files")
+        let poc = made.appendingPathComponent("rag-poc")
+        try FileManager.default.createDirectory(at: poc.appendingPathComponent("corpus/out"),
+                                                withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: poc.appendingPathComponent("web"), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: poc.appendingPathComponent("requirements.txt"))
+        try Data("{}".utf8).write(to: poc.appendingPathComponent("web/package.json"))   // the outermost project counts
+        try Data("x".utf8).write(to: poc.appendingPathComponent("web/Guide.pdf"))
+        for n in 1...Rules.projectDocumentLimit {   // with the guide, one too many
+            try Data("x".utf8).write(to: poc.appendingPathComponent("corpus/out/Policy \(n).pdf"))
+        }
+        try Data("x".utf8).write(to: made.appendingPathComponent("Proposal.docx"))
+        try Data("{}".utf8).write(to: folder.appendingPathComponent("package.json"))   // the chosen folder is no project
+        var options = IndexOptions()
+        options.documentOnlyFolders = [folder.path]
+        let report = Crawler.crawl([folder], options: options)
+        #expect(report.candidates.map { ($0.path as NSString).lastPathComponent } == ["Proposal.docx"])
+        #expect(report.skipped["in a code project with too many documents"] == Rules.projectDocumentLimit + 1)
+        #expect(report.projectRoots.map { ($0 as NSString).lastPathComponent } == ["rag-poc"])
+    }
 }

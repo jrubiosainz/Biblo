@@ -133,6 +133,8 @@ nonisolated final class Engine: @unchecked Sendable {
     private var excludedTypes: [String]
     private var codeRoots: [URL]
     private var codeExcluded: [URL]
+    /// The documents GitHub Copilot makes are searched too (`AppSettings.documentFolders`).
+    private var copilotDocuments: Bool
 
     // indexQueue only
     /// Code search was turned off: the code index goes once no helper has it open.
@@ -171,6 +173,7 @@ nonisolated final class Engine: @unchecked Sendable {
         excludedTypes = settings.excludedTypes
         codeRoots = settings.codeRoots
         codeExcluded = settings.codeExcluded
+        copilotDocuments = settings.copilotDocuments
         codeQuietSeconds = settings.codeQuietSeconds
         pruneWanted = !settings.roots.isEmpty
         self.backfillBlocker = backfillBlocker
@@ -295,6 +298,24 @@ nonisolated final class Engine: @unchecked Sendable {
         }
     }
 
+    /// The documents GitHub Copilot makes searched or not: the watcher follows, and the helper restarts with them (or
+    /// without, and theirs leave the index).
+    func setCopilotDocuments(_ on: Bool) {
+        lock.withLock { copilotDocuments = on }
+        log("copilot documents: \(on ? "on" : "off")")
+        watchQueue.async { [self] in startWatching() }
+        indexQueue.async { [self] in
+            pruneWanted = true
+            syncWantedAt = Date()
+            if helper != nil {
+                restartHelper = true
+                send("stop")
+            } else {
+                startHelper()
+            }
+        }
+    }
+
     /// The model has finished downloading: index what's waiting, and meaning search may start.
     func modelArrived() {
         update { $0.waitingForModel = false }
@@ -391,25 +412,30 @@ nonisolated final class Engine: @unchecked Sendable {
 
     // MARK: Indexing (in the helper process)
 
-    /// Watches the chosen folders that are there (a missing one is picked up when a drive connects), for changes that
-    /// can change what the helper's walk of them finds (`ChangeFilter`, with the helper's settings).
+    /// Watches the chosen folders that are there (a missing one is picked up when a drive connects), and the Copilot
+    /// folders searched for documents, for changes that can change what the helper's walk of them finds
+    /// (`ChangeFilter`, with the helper's settings).
     private func startWatching() {
         watcher = nil
-        let (roots, excluded, types): ([URL], [URL], [String]) = lock.withLock {
-            (self.roots, self.excluded, self.excludedTypes)
+        let (roots, excluded, types, copilot): ([URL], [URL], [String], Bool) = lock.withLock {
+            (self.roots, self.excluded, self.excludedTypes, self.copilotDocuments)
         }
         let present = roots.filter(AppSettings.isFolder)
-        guard !present.isEmpty else { return }
+        let documents = AppSettings.documentFolders(copilot: copilot, roots: roots)
+        guard !present.isEmpty || !documents.isEmpty else { return }
         var options = IndexOptions()
         options.excludedFolders = excluded.map(\.path)
         options.excludedExtensions = IndexOptions.extensions(types.joined(separator: ","))
-        var filter = ChangeFilter(roots: present.map(\.path), options: options)
+        options.documentOnlyFolders = documents.map(\.path)
+        let watched = (present + documents).map(\.path)
+        var filter = ChangeFilter(roots: watched, options: options)
         filter.setProjects(knownProjects)
-        watcher = FolderWatcher(paths: present.map(\.path), filter: filter, latency: 0.25, queue: watchQueue) {
+        watcher = FolderWatcher(paths: watched, filter: filter, latency: 0.25, queue: watchQueue) {
             [weak self] changed, ignored in
             self?.foldersChanged(changed, ignored: ignored)
         }
-        log(watcher == nil ? "watch: can't watch the folders" : "watch: \(present.count) folders")
+        log(watcher == nil ? "watch: can't watch the folders" : "watch: \(present.count) folders"
+            + (documents.isEmpty ? "" : " + \(documents.count) for Copilot documents"))
     }
 
     /// Watches the code folders that are there, as `startWatching` does the others.
@@ -507,7 +533,7 @@ nonisolated final class Engine: @unchecked Sendable {
         let (roots, excluded, types, paused, backfill): ([URL], [URL], [String], Bool, Bool) = lock.withLock {
             (self.roots, self.excluded, self.excludedTypes, self.paused, backfillBlocker == nil)
         }
-        let (codeRoots, codeExcluded) = lock.withLock { (self.codeRoots, self.codeExcluded) }
+        let (codeRoots, codeExcluded, copilot) = lock.withLock { (self.codeRoots, self.codeExcluded, copilotDocuments) }
         if codeRoots.isEmpty { codeSyncWantedAt = nil }   // code search is off
         guard helper == nil, !paused else { return }
         guard !roots.isEmpty || !codeRoots.isEmpty || pruneWanted else {
@@ -525,6 +551,9 @@ nonisolated final class Engine: @unchecked Sendable {
         for type in types { arguments += ["--exclude-ext", type] }
         for folder in codeRoots { arguments += ["--code-root", folder.path] }
         for folder in codeExcluded { arguments += ["--code-exclude", folder.path] }
+        for folder in AppSettings.documentFolders(copilot: copilot, roots: roots) {
+            arguments += ["--docs-only", folder.path]
+        }
         process.arguments = arguments + roots.map(\.path)
         process.environment = ProcessInfo.processInfo.environment.merging(["BIBLO_MODELS": modelsDirectory.path]) { $1 }
         process.qualityOfService = .utility
@@ -607,7 +636,11 @@ nonisolated final class Engine: @unchecked Sendable {
                     guard projects != knownProjects else { return }
                     knownProjects = projects
                     watcher?.setProjects(projects)
-                    log("watch: \(projects.count) code projects in the folders; only screenshots count inside them")
+                    let crowded = projects.filter { project in
+                        AppSettings.copilotFolders.contains { FolderSelection.isInside(project, $0.path) }
+                    }.count
+                    log("watch: \(projects.count - crowded) code projects in the folders; only screenshots count inside them"
+                        + (crowded == 0 ? "" : " (+ \(crowded) in Copilot's with too many documents to keep any)"))
                 }
             }
             applyCounts(event)
@@ -901,6 +934,22 @@ nonisolated final class Engine: @unchecked Sendable {
         var unfinished = 0   // long files searchable but still being read (counted in `indexed` too)
         var kinds: [FileKind: Int] = [:]
         var id: String { path }
+
+        mutating func count(_ files: [FileRecord]) {
+            for file in files {
+                self.files += 1
+                kinds[file.kind, default: 0] += 1
+                switch file.state {
+                case "done": indexed += 1
+                case "partial":
+                    indexed += 1
+                    unfinished += 1
+                case "pending": pending += 1
+                case "failed": failed += 1
+                default: skipped += 1
+                }
+            }
+        }
     }
 
     /// What's indexed under each folder; `code`: each code folder, in the code index.
@@ -912,22 +961,24 @@ nonisolated final class Engine: @unchecked Sendable {
                 let summaries = lock.withLock { code ? codeRoots : roots }.map { root -> RootSummary in
                     var summary = RootSummary(path: root.path, missing: !AppSettings.isFolder(root),
                                               unreadable: unreadable.contains(root.path))
-                    for file in (try? store?.files(under: [root.path])) ?? [] {
-                        summary.files += 1
-                        summary.kinds[file.kind, default: 0] += 1
-                        switch file.state {
-                        case "done": summary.indexed += 1
-                        case "partial":
-                            summary.indexed += 1
-                            summary.unfinished += 1
-                        case "pending": summary.pending += 1
-                        case "failed": summary.failed += 1
-                        default: summary.skipped += 1
-                        }
-                    }
+                    summary.count((try? store?.files(under: [root.path])) ?? [])
                     return summary
                 }
                 continuation.resume(returning: summaries)
+            }
+        }
+    }
+
+    /// What's indexed of the documents GitHub Copilot made, all its folders together; nil while they aren't searched.
+    func copilotSummary() async -> RootSummary? {
+        let (copilot, roots) = lock.withLock { (copilotDocuments, self.roots) }
+        let folders = AppSettings.documentFolders(copilot: copilot, roots: roots)
+        guard !folders.isEmpty else { return nil }
+        return await withCheckedContinuation { continuation in
+            searchQueue.async { [self] in
+                var summary = RootSummary(path: "~/.copilot")
+                summary.count((try? searchStore?.files(under: folders.map(\.path))) ?? [])
+                continuation.resume(returning: summary)
             }
         }
     }

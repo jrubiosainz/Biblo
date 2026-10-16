@@ -186,6 +186,14 @@ final class AppController {
         power.setIndexOnBattery(on)
     }
 
+    /// The documents GitHub Copilot makes searched or not (`AppSettings.documentFolders`); off, theirs leave the index.
+    func setCopilotDocuments(_ on: Bool) {
+        guard !AppSettings.demo, on != model.settings.copilotDocuments else { return }
+        AppSettings.save(copilotDocuments: on)
+        model.settings.copilotDocuments = on
+        engine.setCopilotDocuments(on)
+    }
+
     /// Asks for folders with the standard open panel (as a sheet when there's a window).
     func pickFolders(for window: NSWindow?, prompt: String = "Add", then done: @escaping ([URL]) -> Void) {
         let panel = NSOpenPanel()

@@ -157,7 +157,7 @@ import UniformTypeIdentifiers
             _ = try SlideExtractor.read(locked)
             Issue.record("read a password-protected deck")
         } catch {
-            #expect("\(error)" == "password-protected")
+            #expect("\(error)" == "encrypted (a sensitivity label or a password)")
         }
     }
 

@@ -31,6 +31,11 @@ public struct FileChange: Sendable, Equatable {
     var went: Bool {
         [kFSEventStreamEventFlagItemRemoved, kFSEventStreamEventFlagItemRenamed].contains(where: has)
     }
+    /// It moved, or was copied as a whole (a Finder duplicate): unlike a folder made or deleted a file at a time, what's
+    /// in it brings no events of its own.
+    var movedOrCloned: Bool {
+        [kFSEventStreamEventFlagItemRenamed, kFSEventStreamEventFlagItemCloned].contains(where: has)
+    }
 }
 
 /// Whether a change can change what a walk of the folders finds (`Crawler`, `Rules`). The app syncs only for those: a
@@ -41,6 +46,8 @@ public struct FileChange: Sendable, Equatable {
 /// cloud, and about images inside code projects, whether they're screenshots. When in doubt, it's a change.
 public struct ChangeFilter: Sendable {
     private let roots: [String]
+    /// Chosen folders where a walk keeps only documents (`IndexOptions.documentOnlyFolders`), as given and real.
+    private let documentRoots: Set<String>
     /// Chosen folders whose real path differs (/var → /private/var), as given and as FSEvents reports them.
     private let aliases: [(given: String, real: String)]
     private let excluded: [String]
@@ -62,6 +69,7 @@ public struct ChangeFilter: Sendable {
             return paths.flatMap { [$0, FolderSelection.realPath($0)] }.filter { seen.insert($0).inserted }
         }
         self.roots = withRealPaths(roots)
+        documentRoots = Set(withRealPaths(options.documentOnlyFolders))
         aliases = roots.map { (given: $0, real: FolderSelection.realPath($0)) }.filter { $0.given != $0.real }
         excluded = withRealPaths(options.excludedFolders)
         self.options = options
@@ -69,8 +77,9 @@ public struct ChangeFilter: Sendable {
         self.inTheCloud = inTheCloud
     }
 
-    /// The code projects the last walk found (`CrawlReport.projectRoots`), where it keeps only screenshots. Not for the
-    /// code index. Until a walk says, none: everything counts as it would anywhere.
+    /// The code projects the last walk found (`CrawlReport.projectRoots`), where it keeps only screenshots (in a
+    /// documents-only folder, those with too many documents, where it keeps none). Not for the code index. Until a walk
+    /// says, none: everything counts as it would anywhere.
     public mutating func setProjects(_ folders: [String]) {
         var known = Set<String>()
         for folder in folders {
@@ -107,6 +116,7 @@ public struct ChangeFilter: Sendable {
             folder += "/" + name
             if Rules.skipsFolder(named: name, code: options.code) || folder == library { return false }
         }
+        if documentRoots.contains(root) { return concerns(documentsOnly: change) }
         if !options.code, let project = project(of: path) { return concerns(change, inProject: project) }
         if change.isFolder, change.cameOrWent { return true }   // with what's in it
         guard change.isFile else { return !change.isFolder }    // a folder changed in place (its date, its tags)
@@ -153,5 +163,27 @@ public struct ChangeFilter: Sendable {
         guard Rules.mayBeImage(name, options: options) else { return false }
         if gone { return change.went }   // it may have been a screenshot: the mark went with it
         return Rules.isScreenshot(URL(fileURLWithPath: path))
+    }
+
+    /// In a documents-only folder a walk keeps decks, Word documents and PDFs, while the Copilot app writes there all
+    /// the time (its logs, databases, screenshots, builds).
+    private func concerns(documentsOnly change: FileChange) -> Bool {
+        let path = change.path
+        let name = (path as NSString).lastPathComponent
+        if let project = project(of: path) {
+            // A project with too many documents to keep any (`Rules.projectDocumentLimit`), until its marker goes or
+            // documents do (a folder that moved away takes its documents along).
+            if Rules.isProjectMarker(name), (path as NSString).deletingLastPathComponent == project {
+                return change.went && !FileManager.default.fileExists(atPath: path)
+            }
+            if change.isFolder { return change.went }
+            return change.isFile && change.went && Rules.isDocument(name, options: options)
+        }
+        // A project's marker coming or going changes what's kept around it (a .git folder is one too).
+        if change.cameOrWent, Rules.isProjectMarker(name) { return true }
+        // A folder that moved takes its documents along; one made or deleted brings its files' own events.
+        if change.isFolder { return change.movedOrCloned }
+        guard change.isFile else { return true }
+        return Rules.isDocument(name, options: options) && !inTheCloud(path)
     }
 }
