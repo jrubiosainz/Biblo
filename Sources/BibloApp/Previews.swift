@@ -354,9 +354,9 @@ struct WhyItMatched: View {
                     .foregroundStyle(row.matchedMeaning ? AnyShapeStyle(Brand.gradient) : AnyShapeStyle(.secondary))
             }
             .font(.system(size: 12, weight: .medium))
-            // Code shows its lines above, the words marked there.
+            // Code shows its lines above, the words marked there. What's said in a recording is quoted.
             if let excerpt = row.excerpt, row.kind != .code {
-                Text(highlighted(excerpt, size: 12))
+                Text(highlighted(row.segment == .speech ? "“\(excerpt)”" : excerpt, size: 12))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineLimit(4)

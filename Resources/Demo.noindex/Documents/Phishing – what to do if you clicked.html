@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phishing – what to do if you clicked</title>
+<style>
+  :root { color-scheme: light; --ink: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; --accent: #c42b1c; --ok: #1f8a4c; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f5f5f7; color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  main { max-width: 780px; margin: 48px auto; padding: 44px 52px 36px; background: #fff; border-radius: 18px; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 12px 40px rgba(0,0,0,.06); }
+  header p { margin: 0; color: var(--muted); font-size: 14px; letter-spacing: .02em; }
+  h1 { margin: 6px 0 10px; font-size: 34px; line-height: 1.15; letter-spacing: -.02em; }
+  .lede { margin: 0 0 28px; color: #3a3a3c; font-size: 17px; }
+  h2 { margin: 34px 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .09em; color: var(--accent); }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: grid; grid-template-columns: 26px 1fr; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+  li:first-child { border-top: 0; }
+  input { width: 17px; height: 17px; margin: 4px 0 0; accent-color: var(--ok); }
+  li small { display: block; color: var(--muted); font-size: 14px; }
+  code { font: 13.5px ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: #f2f2f5; padding: 1px 5px; border-radius: 5px; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 0; font-size: 15px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  td:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  footer { margin-top: 34px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  footer a { color: var(--accent); }
+  p { margin: 0 0 14px; }
+  .n { width: 20px; height: 20px; margin-top: 3px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p>Contoso security · Marc Puig · Monday, October 5, 2026</p>
+    <h1>Clicked a phishing link? Here's what to do</h1>
+  </header>
+  <p class="lede">It happens to careful people too: in September's simulation, 18 % of us clicked. What matters is the next ten minutes. Nobody gets into trouble for clicking; the only mistake is to keep quiet.</p>
+
+  <h2>In the next ten minutes</h2>
+  <ul>
+    <li><span class="n">1</span><div><b>Report it.</b> Select the email and use the <b>Report</b> button in Outlook, then <i>Report phishing</i>. It reaches us, and we can block it for everyone.<small>Don't forward it to colleagues to ask what they think, and don't delete it before you report it.</small></div></li>
+    <li><span class="n">2</span><div><b>Typed your password? Change it now</b>, from the usual sign-in page, never from a link in an email.<small>Then tell the IT desk, so they can check your recent sign-ins.</small></div></li>
+    <li><span class="n">3</span><div><b>Call the IT desk: extension 3300</b>, 24 hours a day. Say what you clicked, when, and what you typed.</div></li>
+    <li><span class="n">4</span><div><b>Opened an attachment?</b> Take the laptop off the Wi-Fi and the cable, leave it on, and call. Leaving it on helps us see what happened.</div></li>
+    <li><span class="n">5</span><div><b>A sign-in request you didn't start?</b> If your authenticator app asks you to approve a sign-in you didn't make, deny it and call: someone may already have your password.</div></li>
+    <li><span class="n">6</span><div><b>Gave card or bank details?</b> Call your bank too, and block the card.</div></li>
+  </ul>
+
+  <h2>The three signs, before you click</h2>
+  <ul>
+    <li><span class="n">1</span><div><b>It rushes you.</b> “Your account will be locked in 24 hours.” If an email hurries or threatens you, slow down.</div></li>
+    <li><span class="n">2</span><div><b>The sender almost matches.</b> Read the whole address: <code>contoso-soporte.co</code> is not <code>contoso.com</code>.</div></li>
+    <li><span class="n">3</span><div><b>The link asks you to sign in.</b> Hover over it before you click, and never type your password on a page you reached from an email.</div></li>
+  </ul>
+
+  <h2>September's simulation</h2>
+  <p>Every employee got a fake parcel delivery email.</p>
+  <table>
+    <tr><th>What people did</th><th>September</th></tr>
+    <tr><td>Clicked the link (31 % in June)</td><td>18 %</td></tr>
+    <tr><td>Reported it with the Report button</td><td>64 %</td></tr>
+  </table>
+  <p style="margin-top:18px">The training is working. The next simulation is in December.</p>
+
+  <footer>
+    Questions: Marc Puig, security, or the IT desk on extension 3300. The one-minute video, in Spanish, is “Phishing – 3 señales para detectarlo”.
+    Contoso is a fictitious company used for demos.
+  </footer>
+</main>
+</body>
+</html>

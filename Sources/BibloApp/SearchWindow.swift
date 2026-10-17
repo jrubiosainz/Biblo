@@ -903,10 +903,9 @@ private struct SearchHome: View {
 
     /// Demo mode's: each finds something among the sample files.
     private static let demoExamples: [(text: String, kind: ResultGroupKind)] = [
-        ("el logo verde de Fabric", .documents), ("el logo de Copilot", .images),
-        ("una terminal desplegando en Azure", .screenshots), ("alguien explicando qué es un agente de IA", .audio),
-        ("un diagrama de arquitectura", .images), ("un vídeo sobre Foundry", .video),
-        ("code: crear un agente con una herramienta", .code),
+        ("el código de la taquilla", .audio), ("qué es RAG", .video), ("la tarjeta de visita de Tom", .images),
+        ("el error 429", .screenshots), ("el presupuesto de formación", .documents), ("el logo de Copilot", .images),
+        ("cuántos celíacos vienen al Data Summit", .audio), ("code: reintentar cuando el modelo devuelve 429", .code),
     ]
 
     /// With code search on, one of code's too.

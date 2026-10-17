@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datos e IA · octubre · nº 7</title>
+<style>
+  :root { color-scheme: light; --ink: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; --accent: #0f6cbd; --ok: #1f8a4c; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f5f5f7; color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  main { max-width: 780px; margin: 48px auto; padding: 44px 52px 36px; background: #fff; border-radius: 18px; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 12px 40px rgba(0,0,0,.06); }
+  header p { margin: 0; color: var(--muted); font-size: 14px; letter-spacing: .02em; }
+  h1 { margin: 6px 0 10px; font-size: 34px; line-height: 1.15; letter-spacing: -.02em; }
+  .lede { margin: 0 0 28px; color: #3a3a3c; font-size: 17px; }
+  h2 { margin: 34px 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .09em; color: var(--accent); }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: grid; grid-template-columns: 26px 1fr; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+  li:first-child { border-top: 0; }
+  input { width: 17px; height: 17px; margin: 4px 0 0; accent-color: var(--ok); }
+  li small { display: block; color: var(--muted); font-size: 14px; }
+  code { font: 13.5px ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: #f2f2f5; padding: 1px 5px; border-radius: 5px; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 0; font-size: 15px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  td:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  footer { margin-top: 34px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  footer a { color: var(--accent); }
+  p { margin: 0 0 14px; }
+  td:last-child { text-align: right; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p>Contoso Outdoor · newsletter de Datos e IA · nº 7 · viernes, 16 de octubre de 2026</p>
+    <h1>Datos e IA, octubre</h1>
+  </header>
+  <p class="lede">Un mes del asistente de devoluciones en piloto, GitHub Copilot para los 420 ingenieros, el Data Summit a menos de un mes y dos episodios nuevos para escuchar con el café. Se lee en cinco minutos.</p>
+
+  <h2>El asistente de devoluciones, en cifras</h2>
+  <p>Esta semana, de lunes a jueves, el asistente resolvió el 67 % de las conversaciones sin una persona: cinco puntos más que la semana pasada. Los clientes le dan un 4,6 sobre 5, por encima del objetivo de 4,5, y una devolución lleva cuatro minutos en vez de once.</p>
+  <table>
+    <tr><th>Indicador</th><th>Esta semana</th></tr>
+    <tr><td>Conversaciones resueltas sin una persona</td><td>67 %</td></tr>
+    <tr><td>Satisfacción de los clientes (de 1 a 5)</td><td>4,6</td></tr>
+    <tr><td>Duración de una devolución</td><td>4 min</td></tr>
+    <tr><td>Tiempo de respuesta (p95)</td><td>6,2 s</td></tr>
+  </table>
+  <p style="margin-top:18px">Desde el miércoles está en producción la versión 0.4: los clientes ya pueden pedir en el chat que un mensajero recoja la devolución, en franjas de dos horas, de lunes a sábado. El martes 13 hubo 20 minutos de errores por el límite de tasa del modelo; ahora el asistente espera y lo vuelve a intentar, y desde ayer hay alertas. Si las cifras se mantienen, el equipo de ventas se incorpora al piloto el 2 de noviembre.</p>
+
+  <h2>GitHub Copilot, para los 420 ingenieros</h2>
+  <p>El despliegue empieza el lunes, en tres olas:</p>
+  <table>
+    <tr><th>Ola</th><th>Quién</th><th>Personas</th></tr>
+    <tr><td>Lunes 19 de octubre</td><td>Los equipos del piloto: el asistente de devoluciones, web y datos</td><td>60</td></tr>
+    <tr><td>Lunes 2 de noviembre</td><td>Todos los equipos de producto, cada uno con un kickoff de 90 minutos</td><td>160</td></tr>
+    <tr><td>Lunes 16 de noviembre</td><td>El resto, también las personas externas con cuenta de Contoso</td><td>200</td></tr>
+  </table>
+  <p style="margin-top:18px">El 1 de diciembre lo tendrá todo el mundo, y el 15 de diciembre llega la encuesta para desarrolladores. Antes de la primera ola, Marc deja configuradas en la organización las tres políticas que pidió el comité de seguridad: bloquear las sugerencias que coincidan con código público, dejar fuera del contexto de Copilot los archivos de configuración con secretos y que una persona apruebe cada fusión, también cuando la pull request la abre Copilot. El comité las revisa hoy a mediodía. ¿Dudas? En el canal <b>#copilot-rollout</b> de Teams.</p>
+
+  <h2>Data Summit Madrid · jueves 12 de noviembre</h2>
+  <p>Ya hay más de 900 personas inscritas, y la entrada es gratuita. Lucía abre el día con la keynote: cómo gestionamos las devoluciones con un agente de IA, con una demo en directo. Por la tarde, cuatro equipos cuentan en una mesa redonda qué han aprendido de la IA en producción: evaluaciones, costes y límites de tasa. El café y la comida son de Fourth Coffee. La agenda completa está en SharePoint.</p>
+
+  <h2>Para escuchar</h2>
+  <table>
+    <tr><th>Episodio</th><th>De qué va</th><th>Salió el</th></tr>
+    <tr><td>Datos con café, ep. 9</td><td>La replicación de bases de datos en Fabric, el <i>mirroring</i>: Azure SQL, Cosmos DB o Snowflake en OneLake casi en tiempo real, sin procesos de carga.</td><td>8 oct</td></tr>
+    <tr><td>AI in Two Minutes, ep. 15</td><td>Qué es MCP, el «USB-C de la IA», y cómo usar un servidor con cabeza: solo los de confianza, y con el mínimo acceso.</td><td>9 oct</td></tr>
+  </table>
+
+  <h2>Lo que viene</h2>
+  <table>
+    <tr><th>Qué</th><th>Cuándo</th></tr>
+    <tr><td>Primera ola de GitHub Copilot</td><td>19 oct</td></tr>
+    <tr><td>Staging del asistente, sin claves: identidad administrada (CX-148)</td><td>30 oct</td></tr>
+    <tr><td>El equipo de ventas se incorpora al piloto</td><td>2 nov</td></tr>
+    <tr><td>Data Summit Madrid</td><td>12 nov</td></tr>
+    <tr><td>Próximo comité de seguridad</td><td>20 nov</td></tr>
+    <tr><td>Encuesta de GitHub Copilot</td><td>15 dic</td></tr>
+  </table>
+
+  <footer>
+    Edita Javier Molina, del equipo de Datos. ¿Quieres contar algo en el nº 8? Escribe a
+    <a href="mailto:datos@contoso.com">datos@contoso.com</a> antes del 6 de noviembre.
+    Contoso es una empresa ficticia y esta newsletter es contenido de ejemplo: sus cifras y sus nombres son inventados.
+  </footer>
+</main>
+</body>
+</html>

@@ -18,19 +18,26 @@ browser -> web/ (React) -> src/app.py (FastAPI on Azure Container Apps, managed 
                    '-- function calls, run back in src/tools.py:
                          lookup_order  -> lakehouse contoso_sales in Microsoft Fabric (read-only)
                          create_return -> returns API (opens returns; can't refund)
+                         book_pickup   -> returns API -> Fabrikam Logistics, the courier
 
 "Talk to a person" -> support desk API, with the whole conversation
+
+src/orders_server.py: the same three functions over MCP, for the sales team's agent (not deployed until CX-150)
 ```
 
 | Where | What |
 |---|---|
 | `prompts/returns-assistant.md` | what the agent does, and what it never does |
-| `src/tools.py` | `lookup_order`, `create_return` and File Search |
+| `src/tools.py` | `lookup_order`, `create_return`, `book_pickup` and File Search |
+| `src/pickup_slots.py` | when the courier can come, and what it costs the customer |
+| `src/retry.py` | waits and tries again when the model answers 429 |
 | `src/agent.py` | publishing, promoting, the policy PDFs and a chat turn |
-| `src/evaluate.py` | the golden set, scored before a version is promoted |
+| `src/evaluate.py` | the golden set, scored before a version is promoted (`evals/README.md`) |
+| `src/orders_server.py` | the order tools over MCP |
 | `src/app.py` | the chat's API |
 | `web/` | the chat |
-| `infra/` | everything `azd up` creates, in Bicep |
+| `infra/` | everything `azd up` creates, in Bicep, alerts included |
+| `docs/adr/` | decisions, from number 7 on (1 to 6 are on the team wiki) |
 
 ## Run it locally
 
@@ -43,7 +50,7 @@ and read access to the Contoso Sales workspace in Fabric (ask Javier).
 ```sh
 azd auth login
 set -a; eval "$(azd env get-values)"; set +a   # the dev environment's endpoints
-export RETURNS_DRY_RUN=1                       # create_return answers RMA-DRYRUN and opens nothing
+export RETURNS_DRY_RUN=1                       # no real returns, no couriers
 uv sync
 uv run uvicorn src.app:app --reload --port 8000
 ```
@@ -57,6 +64,8 @@ npm run dev                                    # http://localhost:5173, which pa
 ```
 
 `uv run python -m src.agent chat` talks to the agent in the terminal instead, and `uv run pytest` runs the tests.
+`uv run python -m src.orders_server` serves the order tools over MCP at `http://127.0.0.1:8001/mcp`, for VS Code or
+any other MCP client.
 
 ## Releasing a change
 
@@ -64,16 +73,16 @@ Every change to the prompt or the tools is a new version of the agent, and custo
 promoted:
 
 ```sh
-uv run python -m src.agent publish           # Published returns-assistant version 8
-uv run python -m src.evaluate --version 8    # the golden set, scored; fails if a target is missed
-uv run python -m src.agent promote 8
+uv run python -m src.agent publish           # Published returns-assistant version 9
+uv run python -m src.evaluate --version 9    # the golden set, scored; fails if a target is missed
+uv run python -m src.agent promote 9
 ```
 
-To roll back, promote the version before: `uv run python -m src.agent promote 7`.
+To roll back, promote the version before: `uv run python -m src.agent promote 8`.
 
-The golden set has 112 conversations in English and Spanish, taken from real chats, so it lives in SharePoint
-(Customer Care › Agent pilot), not here. Download it to `evals/golden.jsonl`, which git ignores; `evals/sample.jsonl`
-shows the format. The targets are in `src/evaluate.py` and come from the agent evaluation checklist.
+The golden set has 120 conversations in English and Spanish: 112 taken from real chats and 8 about courier pickups
+that Ana wrote (CX-139). Because of the real ones it lives in SharePoint (Customer Care › Agent pilot), not here.
+Download it to `evals/golden.jsonl`, which git ignores. `evals/README.md` has the format, the targets and the scores.
 
 ## Updating the policies
 
@@ -109,7 +118,11 @@ azd deploy   # after that, for code changes
 4. **Guardrails:** in the Foundry portal, assign the *support-default* guardrail to returns-assistant for user
    prompts, outputs, tool calls and tool responses. Keep it on tool calls (decided on October 6).
 
-Keys are off on the Foundry resource (`disableLocalAuth`), so everything signs in with Microsoft Entra ID.
+`azd up` also creates the three alerts in `infra/alerts.bicep`, which email returns-assistant-oncall@contoso.com.
+The runbook says what to do when one fires.
+
+Keys are off on the Foundry resource (`disableLocalAuth`), so everything signs in with Microsoft Entra ID. Staging
+still has an API key until CX-148 builds it with `azd up` too (ADR 0007, by October 30).
 
 ## Settings
 
@@ -124,19 +137,23 @@ Keys are off on the Foundry resource (`disableLocalAuth`), so everything signs i
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | where traces go | `azd provision` |
 | `AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING` | `true` traces the agent's steps; never what anybody wrote | the container app |
 | `AZURE_CLIENT_ID` | the managed identity the app runs as | the container app |
-| `RETURNS_DRY_RUN` | `1` opens no real returns | you, locally; `src.evaluate` sets it |
+| `RETURNS_DRY_RUN` | `1` opens no real returns and books no couriers | you, locally; `src.evaluate` sets it |
 
 ## Known issues
 
-- **Orders older than 12 months aren't found**, because the lakehouse holds one year. The agent hands them over.
-  Javier is adding a OneLake shortcut to the order history (due October 9).
-- **Groundedness is 3.8**, against a target of 4. The pilot doesn't reach sales until it's 4 or more.
+- **Orders older than 12 months aren't found.** Since October 9, Javier's OneLake shortcut brings the order history
+  into the lakehouse, but `lookup_order` doesn't read it yet, so the agent still hands those orders over.
 - **No time limit across tools.** The checklist asks for 10 seconds; see the TODO in `src/tools.py`.
 - **`lookup_order` trusts the order number.** Fine behind the pilot's sign-in, but it must check that the order
-  belongs to the customer before the chat goes public.
+  belongs to the customer before the sales team joins on November 2 (CX-149).
+- **A pickup can't be changed or cancelled in the chat.** The customer has to ask a person.
+- **Pickups are confirmed by hand.** Until CX-152 connects the returns API to Fabrikam Logistics, Pablo's team in
+  Zaragoza confirms each booking with the courier.
+- **The MCP server isn't deployed.** Sara reviews its permissions first (CX-150).
 - **Sign-in isn't in Bicep**, so a new environment is open to anyone until step 3 above.
 - **No thumbs up or down** in the chat yet, so there's nothing to review on Fridays (checklist §7).
-- `src.evaluate` doesn't compare a version with the promoted one yet (checklist §3).
+- `src.evaluate` doesn't compare a version with the promoted one yet (checklist §3). PR #59 does it in CI, and fails
+  the build if a metric drops more than 5 % (CX-145, in review).
 
 ## People
 
@@ -146,4 +163,5 @@ Keys are off on the Foundry resource (`disableLocalAuth`), so everything signs i
 | On call | Sara (development) |
 | Data and Fabric | Javier |
 | Support | Ana |
+| Courier pickups | Pablo (operations, Zaragoza) |
 | Security, and access to proj-support | Marc |

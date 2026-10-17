@@ -340,6 +340,18 @@ public final class IndexStore {
         return count
     }
 
+    /// Recordings indexed but not listened to by this `version` of `Speech` (indexed before it came, or by an older one),
+    /// in indexing order (`pending`'s).
+    public func unheard(version: String) throws -> [FileRecord] {
+        var out: [FileRecord] = []
+        try db.query("""
+            SELECT \(Self.fileColumns) FROM files WHERE kind IN ('audio', 'video') AND state = 'done'
+            AND coalesce(json_extract(info, '$.speech_version'), '') != ?\(scopeSQL)
+            ORDER BY \(FileKind.indexingOrderSQL), mtime DESC
+            """, [.text(version)] + scopeValues) { out.append(Self.record($0)) }
+        return out
+    }
+
     /// What indexing learned about a file (`finish`'s `info`).
     public func info(of id: Int64) throws -> [String: String] {
         var info: [String: String] = [:]
@@ -360,10 +372,27 @@ public final class IndexStore {
     }
 
     public func finish(_ id: Int64, state: String, detail: String? = nil, info: [String: String] = [:]) throws {
-        let json = info.isEmpty ? nil : (try? JSONSerialization.data(withJSONObject: info, options: [.sortedKeys]))
-            .flatMap { String(data: $0, encoding: .utf8) }
         try db.run("UPDATE files SET state = ?, detail = ?, info = ?, indexed_at = ? WHERE id = ?",
-                   [.text(state), .optional(detail), .optional(json), .double(Date().timeIntervalSince1970), .int(id)])
+                   [.text(state), .optional(detail), .optional(Self.json(info)), .double(Date().timeIntervalSince1970),
+                    .int(id)])
+    }
+
+    /// Replaces what indexing learned about a file in `state`, leaving the rest as it is (its state, its detail).
+    func setInfo(_ id: Int64, _ info: [String: String], ifState state: String) throws {
+        try db.run("UPDATE files SET info = ? WHERE id = ? AND state = ?",
+                   [.optional(Self.json(info)), .int(id), .text(state)])
+    }
+
+    /// A file's state ("pending", "done"…), nil when it's gone.
+    func state(of id: Int64) throws -> String? {
+        var state: String?
+        try db.query("SELECT state FROM files WHERE id = ?", [.int(id)]) { state = $0.text(0) }
+        return state
+    }
+
+    private static func json(_ info: [String: String]) -> String? {
+        info.isEmpty ? nil : (try? JSONSerialization.data(withJSONObject: info, options: [.sortedKeys]))
+            .flatMap { String(data: $0, encoding: .utf8) }
     }
 
     // MARK: Segments
@@ -398,6 +427,13 @@ public final class IndexStore {
         let filter = keepingName ? "AND kind != 'name'" : ""
         try db.run("DELETE FROM fts WHERE rowid IN (SELECT id FROM segments WHERE file = ? \(filter))", [.int(file)])
         try db.run("DELETE FROM segments WHERE file = ? \(filter)", [.int(file)])
+    }
+
+    /// Removes a file's segments of one kind (what a recording said, before it's listened to again).
+    func deleteSegments(of file: Int64, kind: SegmentKind) throws {
+        try db.run("DELETE FROM fts WHERE rowid IN (SELECT id FROM segments WHERE file = ? AND kind = ?)",
+                   [.int(file), .text(kind.rawValue)])
+        try db.run("DELETE FROM segments WHERE file = ? AND kind = ?", [.int(file), .text(kind.rawValue)])
     }
 
     /// "Screenshot 2026-10-01 at 9.41.07 PM.png" → searchable words.

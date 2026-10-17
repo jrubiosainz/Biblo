@@ -84,7 +84,8 @@ public final class Searcher {
             let later = row.text(6) == "pdf"
                 ? kind != SegmentKind.chunk.rawValue && Int(row.int(7)) > steps.bigPDFPages && place > steps.pdfStep
                 : kind == SegmentKind.chunk.rawValue && place > steps.docStep
-            rowSetsScale.append(!later)
+            // What recordings say doesn't move the scale either: a few long podcasts are thousands of lines.
+            rowSetsScale.append(!later && kind != SegmentKind.speech.rawValue)
         }
         self.matrix = matrix
         vectorsLoaded = true
@@ -397,6 +398,18 @@ public final class Searcher {
         "these", "those", "from", "about", "where", "what", "which", "who", "when", "is", "was", "are", "were", "be",
         "it", "its", "some", "any", "find", "show", "file", "files", "photo", "photos", "picture", "image", "images",
         "screenshot", "screenshots", "video", "videos", "pdf", "document", "documents", "recording",
+        // Spanish, with and without accents: «el», «de» and «la» are in every Spanish text, so for «el código de la
+        // taquilla» they made every Spanish transcript three-fifths a match, over the English voicemail that says the
+        // code (2026-10-17). Not «no», «sin» or «son»: they mean something, in Spanish or in English.
+        "el", "la", "los", "las", "lo", "un", "una", "unos", "unas", "al", "del", "de", "en", "con", "por", "para",
+        "sobre", "entre", "desde", "hasta", "hacia", "según", "segun", "tras", "que", "qué", "pero", "si", "ni", "mi",
+        "mis", "tu", "tus", "su", "sus", "te", "se", "nos", "le", "les", "yo", "este", "esta", "estos", "estas", "ese",
+        "esa", "esos", "esas", "eso", "esto", "donde", "dónde", "cuando", "cuándo", "como", "cómo", "quien", "quién",
+        "cual", "cuál", "cuales", "cuáles", "cuanto", "cuánto", "cuanta", "cuánta", "cuantos", "cuántos", "cuantas",
+        "cuántas", "es", "está", "están", "estan", "era", "fue", "hay", "algo", "alguien", "algún", "algun", "alguna",
+        "algunos", "algunas", "más", "mas", "muy", "busca", "buscar", "encuentra", "encontrar", "muestra", "muéstrame",
+        "muestrame", "archivo", "archivos", "fichero", "ficheros", "foto", "fotos", "imagen", "imágenes", "imagenes",
+        "captura", "capturas", "vídeo", "vídeos", "documento", "documentos", "grabación", "grabacion", "grabaciones",
         // Bengali and Arabic (normalized, as `terms` sees them)
         "এবং", "ও", "এই", "সেই", "একটি", "আমার", "থেকে", "জন্য", "সাথে", "মধ্যে", "কোথায়", "কোন", "কী", "কি", "যে",
         "ছবি", "স্ক্রিনশট", "ভিডিও", "ফাইল", "পিডিএফ",
@@ -436,6 +449,10 @@ public final class Searcher {
         "papers": .pdf, "document": .doc, "documents": .doc, "note": .doc, "notes": .doc, "video": .video,
         "videos": .video, "clip": .video, "movie": .video, "audio": .audio, "song": .audio, "podcast": .audio,
         "voice": .audio, "sound": .audio,
+        "captura": .screenshot, "capturas": .screenshot, "pantallazo": .screenshot, "foto": .image, "fotos": .image,
+        "fotografía": .image, "fotografia": .image, "imagen": .image, "imágenes": .image, "imagenes": .image,
+        "documento": .doc, "documentos": .doc, "vídeo": .video, "vídeos": .video, "película": .video,
+        "pelicula": .video, "voz": .audio, "pódcast": .audio, "canción": .audio, "cancion": .audio,
         "স্ক্রিনশট": .screenshot, "ছবি": .image, "পিডিএফ": .pdf, "নোট": .doc, "ভিডিও": .video, "অডিও": .audio,
         "গান": .audio, "রেকর্ডিং": .audio,
         "لقطة": .screenshot, "صورة": .image, "صور": .image, "مستند": .doc, "ملاحظات": .doc, "فيديو": .video,

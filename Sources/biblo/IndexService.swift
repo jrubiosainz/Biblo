@@ -9,12 +9,13 @@ import Foundation
 ///
 /// Protocol: one command per line on stdin, one JSON event per line on stdout.
 ///   stdin:  sync | sync code | stop | backfill on | backfill off      (EOF = stop)
-///   stdout: {"event": "missing" | "pruned" | "sync" | "file" | "rest" | "summary" | "waiting" | "idle" | "error" |
-///            "exit", ...}; events about the code index say "code": true
+///   stdout: {"event": "missing" | "pruned" | "sync" | "file" | "heard" | "rest" | "summary" | "waiting" | "idle" |
+///            "error" | "exit", ...}; events about the code index say "code": true
 ///
 /// The loop: sync, index what the sync just queued (if it's a few files: new files go first, on any power source),
 /// then the backfill if allowed; then the code index the same way (`--code-root`: its own sync, asked for with
-/// "sync code"); then the rest of long files (`Indexer.finishLongFiles`) under the same rules. Between batches it
+/// "sync code"); then what's said in recordings indexed before transcription came (`Indexer.listen`, "heard" events)
+/// and the rest of long files (`Indexer.finishLongFiles`, "rest" events) under the same rules. Between batches it
 /// yields to a new sync, to stop, and to "backfill off"; a sync asked for meanwhile runs before it goes idle. When it's
 /// done it keeps a warm worker for `linger` seconds (screenshots come in bursts), then exits. `--sync` says which syncs
 /// it starts with (both unless told): the app passes only what's owed, so a change in a code folder doesn't walk all
@@ -124,7 +125,13 @@ final class IndexService: @unchecked Sendable {
                     if lock.withLock({ syncRequested || codeSyncRequested }) { continue }
                 }
             }
-            // Once nothing is waiting: the rest of long PDFs and documents, the same way.
+            // Once nothing is waiting: what's said in recordings indexed before transcription came (`Indexer.listen`),
+            // then the rest of long PDFs and documents, the same way.
+            if lock.withLock({ backfillAllowed }), (try? main.store.pendingCount()) ?? 1 == 0,
+               (try? code?.store.pendingCount() ?? 0) ?? 1 == 0, !((try? main.indexer.unheard()) ?? []).isEmpty {
+                guard listen() else { break }
+                if lock.withLock({ syncRequested || codeSyncRequested }) { continue }
+            }
             if lock.withLock({ backfillAllowed }), (try? main.store.pendingCount()) ?? 1 == 0,
                (try? code?.store.pendingCount() ?? 0) ?? 1 == 0, (try? main.store.unfinishedCount().files) ?? 0 > 0 {
                 guard finishLongFiles() else { break }
@@ -240,6 +247,29 @@ final class IndexService: @unchecked Sendable {
         }
     }
 
+    /// What's said in recordings indexed before (`Indexer.listen`), yielding as the backfill does. False when indexing
+    /// has to stop.
+    private func listen() -> Bool {
+        let started = Date()
+        do {
+            let states = try main.indexer.listen(shouldStop: { [self] in
+                lock.withLock { syncRequested || codeSyncRequested && code != nil || stopRequested || !backfillAllowed }
+            }, onEvent: { event in
+                emit(["event": "heard", "done": event.done, "total": event.total, "path": event.path,
+                      "kind": event.kind.rawValue, "state": event.state, "seconds": event.seconds,
+                      "note": event.note ?? ""])
+            })
+            if !states.isEmpty {
+                emitCounts("summary", ["speech": true, "states": states,
+                                       "ms": Int(Date().timeIntervalSince(started) * 1000)])
+            }
+            return true
+        } catch {
+            emit(["event": "error", "message": "\(error)", "fatal": true])
+            return false
+        }
+    }
+
     /// The rest of long files (`Indexer.finishLongFiles`), yielding as the backfill does. False when indexing has to
     /// stop.
     private func finishLongFiles() -> Bool {
@@ -272,7 +302,7 @@ final class IndexService: @unchecked Sendable {
             if stop { return false }
             if sync || codeSync && code != nil { return true }
             if backfill, parts.contains(where: { (try? $0.store.pendingCount()) ?? 0 > 0 })
-                || (try? main.store.unfinishedCount().files) ?? 0 > 0 {
+                || (try? main.store.unfinishedCount().files) ?? 0 > 0 || !((try? main.indexer.unheard()) ?? []).isEmpty {
                 return true
             }
         }

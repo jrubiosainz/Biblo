@@ -11,6 +11,8 @@ nonisolated struct EngineStatus: Sendable, Equatable {
         /// The rest of long PDFs and documents (`Indexer.finishLongFiles`): `done` of the `total` pages and chunks this
         /// pass set out to read, `files` long files still unfinished.
         case finishing(done: Int, total: Int, files: Int)
+        /// What's said in recordings indexed before transcription came (`Indexer.listen`): `done` of `total`.
+        case listening(done: Int, total: Int)
         case failed(String)
     }
 
@@ -667,17 +669,28 @@ nonisolated final class Engine: @unchecked Sendable {
         case "rest":
             update { $0.activity = .finishing(done: int("done"), total: int("total"), files: int("files")) }
             refreshSearcher(force: false)
+        case "heard":
+            update { $0.activity = .listening(done: int("done"), total: int("total")) }
+            if let path = event["path"] as? String {
+                log(String(format: "listen: %@ %@ in %.2f s%@", (path as NSString).lastPathComponent,
+                           event["state"] as? String ?? "?", event["seconds"] as? Double ?? 0,
+                           (event["note"] as? String).map { $0.isEmpty ? "" : " (\($0))" } ?? ""))
+            }
+            refreshSearcher(force: false)
         case "summary":
             let states = (event["states"] as? [String: Int] ?? [:]).sorted { $0.key < $1.key }
                 .map { "\($0.value) \($0.key)" }.joined(separator: " · ")
             let rest = event["rest"] as? Bool == true
-            let what = rest ? "the rest of long files" : event["new"] as? Bool == true ? "new files" : "backfill"
+            let speech = event["speech"] as? Bool == true
+            let what = speech ? "what's said in recordings" : rest ? "the rest of long files"
+                : event["new"] as? Bool == true ? "new files" : "backfill"
             log("index: \(what): \(states) in \(int("ms")) ms")
             // The pass is over (the helper may go on to the code index for a long while): not "Indexing 100%".
             applyCounts(event)
             update {
                 switch $0.activity {
-                case .indexing where !rest, .finishing where rest: $0.activity = .idle
+                case .indexing where !rest && !speech, .finishing where rest, .listening where speech:
+                    $0.activity = .idle
                 default: break
                 }
             }
@@ -784,6 +797,7 @@ nonisolated final class Engine: @unchecked Sendable {
         update {
             if case .indexing = $0.activity { $0.activity = .idle }
             if case .finishing = $0.activity { $0.activity = .idle }
+            if case .listening = $0.activity { $0.activity = .idle }
             if case .starting = $0.activity { $0.activity = .idle }
             $0.opening = nil
             $0.code.indexing = nil

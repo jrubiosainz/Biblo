@@ -25,6 +25,8 @@ public enum SegmentKind: String, Sendable {
     case frame            // a video keyframe
     case lines            // a stretch of a code file: loc to loc_end are its first and last lines
     case cells            // a stretch of a notebook: loc to loc_end are its first and last cells, from 1
+    /// About a sentence said in a recording (a file's or a video's soundtrack), from loc to loc_end seconds (`Speech`).
+    case speech
 }
 
 /// What produced a segment's vector. Scores are normalized per modality because text vectors score higher than
@@ -65,6 +67,9 @@ public struct IndexOptions: Sendable {
     public var frameInterval = 3.0         // seconds between sampled video frames (near-duplicates are dropped)
     public var audioWindow = 30.0          // the model silently ignores audio past 30 s of one input
     public var audioHop = 25.0
+    /// What's said in recordings is transcribed (`Speech`, macOS 26). Not part of `fingerprint`: recordings indexed
+    /// before are listened to on their own (`Indexer.listen`), and nothing else is embedded again.
+    public var speech = true
     public var excludedFolders: [String] = []
     public var excludedExtensions: Set<String> = []
     /// Chosen folders where only PDFs and Office documents count (`Rules.isDocument`): the app's ~/.copilot folders,

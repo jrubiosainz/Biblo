@@ -9,6 +9,8 @@
 # The text and code files are written by hand and kept as they are. This makes everything else again (PDF, Word, RTF,
 # PowerPoint, PNG, JPEG, M4A, MP4) with scripts/demo/make_demo.py: pictures are HTML drawn by a headless Edge or
 # Chrome, voices are macOS's `say`, videos ffmpeg, decks python-pptx, Word and RTF files textutil.
+# macOS's voices never say a line quite the same way twice, so what Biblo hears in a recording changes every time it's
+# made: after making audio or video again, check each one with `biblo listen <file>` and keep a take that's heard right.
 #
 #   scripts/make-demo.sh              everything
 #   scripts/make-demo.sh slides …     only what's named (see make_demo.py --help)

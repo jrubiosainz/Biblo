@@ -35,6 +35,7 @@ from openai.types.responses import Response
 from openai.types.responses.response_input_param import FunctionCallOutput
 from pypdf import PdfReader, PdfWriter
 
+from src.retry import with_retry
 from src.tools import agent_tools, call_tool
 
 ENDPOINT = os.environ["FOUNDRY_PROJECT_ENDPOINT"]
@@ -98,7 +99,7 @@ def turn(openai: OpenAI, conversation_id: str, text: str, version: str | None = 
 
     With a `version` it's that version that answers, not the promoted one; `openai` is then chat_client(version)."""
     extra = {"agent_reference": {"type": "agent_reference", "name": AGENT, "version": version}} if version else None
-    response = openai.responses.create(conversation=conversation_id, input=text, extra_body=extra)
+    response = with_retry(openai.responses.create, conversation=conversation_id, input=text, extra_body=extra)
     rounds = 0
     while calls := [item for item in response.output if item.type == "function_call"]:
         rounds += 1
@@ -109,7 +110,8 @@ def turn(openai: OpenAI, conversation_id: str, text: str, version: str | None = 
             yield Event("tool", {"name": call.name, "arguments": json.loads(call.arguments)})
             outputs.append(FunctionCallOutput(type="function_call_output", call_id=call.call_id,
                                               output=call_tool(call.name, call.arguments)))
-        response = openai.responses.create(conversation=conversation_id, input=outputs, extra_body=extra)
+        response = with_retry(openai.responses.create, conversation=conversation_id, input=outputs,
+                              extra_body=extra)
     yield Event("answer", {"text": response.output_text, "sources": sources(response), "response_id": response.id})
 
 

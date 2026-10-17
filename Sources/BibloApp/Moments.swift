@@ -17,9 +17,10 @@ extension ResultRow {
         return Int(loc)
     }
 
-    /// Seconds into a recording where the match starts.
+    /// Seconds into a recording where the match starts: a frame, a stretch of sound, or a line of what's said.
     var moment: Double? {
-        guard kind == .video || kind == .audio, segment == .frame || segment == .audio else { return nil }
+        guard kind == .video || kind == .audio, segment == .frame || segment == .audio || segment == .speech
+        else { return nil }
         return loc
     }
 

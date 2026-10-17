@@ -22,6 +22,8 @@ más de 100 idiomas, es abierto (Apache 2.0) y, con 740 M de parámetros, cabe d
 
 - «una cebra en un vídeo» abre el clip en el momento en que aparece la cebra
 - «donde hablan de dormir» salta a ese minuto del pódcast
+- «lo que dijeron del presupuesto en la llamada» salta a la frase de la grabación en la que se dice, y la muestra
+  escrita
 - «la cláusula de las mascotas en el contrato» muestra la página del PDF con las palabras marcadas
 - «un perro en la playa» encuentra la foto, y «error de pago rechazado», la captura
 - una búsqueda en español encuentra una nota escrita en inglés, en árabe o en cualquiera de los más de 100 idiomas del
@@ -66,7 +68,8 @@ hasta allí.
 ## Privado
 
 Nada de lo que indexas sale del Mac. Biblo solo se conecta a internet una vez, para descargar el modelo de Hugging
-Face. Sin cuenta, sin telemetría y sin comprobar actualizaciones. Solo lee tus archivos: nunca los cambia, los mueve ni
+Face. Para transcribir, macOS descarga de Apple el modelo de voz de cada idioma que le falte, también una sola vez y
+para todas las apps; la transcripción ocurre en el Mac. Sin cuenta, sin telemetría y sin comprobar actualizaciones. Solo lee tus archivos: nunca los cambia, los mueve ni
 los sube.
 
 ## Qué lee
@@ -79,8 +82,11 @@ Solo las carpetas que eliges:
 - documentos y presentaciones: txt, md, rtf, doc, docx, odt, pptx y html, los largos de la misma manera. El texto que
   es casi todo números, como una exportación de datos, solo se busca por su texto exacto
 - audio de cualquier duración: el modelo escucha 30 segundos cada vez, así que Biblo toma ventanas de 30 s solapadas y
-  cada acierto apunta a su momento
-- vídeo de cualquier duración: un fotograma cada pocos segundos, uno por plano, más la pista de sonido, como el audio
+  cada acierto apunta a su momento. En macOS 26 también lee lo que se dice: el reconocimiento de voz de Apple lo
+  transcribe en el Mac, frase a frase y con su segundo (hasta 4 horas por archivo), y una búsqueda encuentra el momento
+  en que alguien dice algo, por el significado o por las palabras exactas
+- vídeo de cualquier duración: un fotograma cada pocos segundos, uno por plano, más la pista de sonido y lo que se dice
+  en ella, como el audio
 
 Fuera de las carpetas que eliges para la búsqueda de código no lee código, y dentro de un proyecto (una carpeta con
 `.git`, `package.json` y similares) solo lee las capturas. Nunca lee claves, certificados, archivos de contraseñas,
@@ -118,16 +124,20 @@ Mientras trabajas, el índice se pone al día un minuto después de que todo se 
 
 ## Modo demo
 
-Para grabar Biblo o enseñarlo sin abrir tus carpetas: Settings → General → Demo mode. Biblo copia unos archivos de
+Para grabar Biblo o enseñarlo sin abrir tus carpetas: Settings → General → Demo mode. Biblo copia unos 155 archivos de
 muestra a `~/Biblo Demo` y busca solo en ellos, con un índice aparte; al apagarlo vuelve a tus carpetas y a tu índice.
-Son documentos, diapositivas, imágenes, capturas, audio, vídeo y código sobre Microsoft Foundry, Fabric y Copilot, con
-datos públicos, empresas ficticias y cifras inventadas.
+Cuentan unas semanas de Lucía Romero, responsable de atención al cliente de Contoso Outdoor, una marca ficticia de
+material de montaña: el lanzamiento de una tienda de campaña, un asistente piloto hecho con Microsoft Foundry, un
+offsite en Lisboa y un evento para 900 personas. Hay documentos, diapositivas, fotos, capturas, notas de voz, llamadas,
+podcasts, vídeos y código, con datos públicos de Microsoft Foundry, Fabric y Copilot, empresas ficticias y cifras
+inventadas. En macOS 26, lo que se dice en las grabaciones también se encuentra, en su segundo exacto: prueba «el código
+de la taquilla» o «qué es RAG».
 
 En git solo están los textos y el código escritos a mano, en `Resources/Demo.noindex`: las condiciones de uso de los
 logos de Microsoft y GitHub y la licencia de las voces de macOS limitan volver a publicar el resto. Lo genera
-`scripts/make-demo.sh`, que necesita ffmpeg, Edge o Chrome y los logos oficiales (se descargan como indica
-`scripts/demo/assets/SOURCES.md`), y `./build.sh` lo mete en la app. Los logos aparecen sin alterar, como piden sus
-guías de marca: revísalas antes de publicar nada.
+`scripts/make-demo.sh`, que necesita ffmpeg, Edge o Chrome, las voces de macOS que usa (si falta alguna, dice cuál y
+dónde descargarla) y los logos oficiales (se descargan como indica `scripts/demo/assets/SOURCES.md`), y `./build.sh` lo
+mete en la app. Los logos aparecen sin alterar, como piden sus guías de marca: revísalas antes de publicar nada.
 
 ## Instalar
 
@@ -165,10 +175,11 @@ notariza y empaqueta un DMG.
 ## Cómo funciona
 
 ```
-tus carpetas ─► lectores (ImageIO, PDFKit, AVFoundation y Vision para el texto de las capturas)
+tus carpetas ─► lectores (ImageIO, PDFKit, AVFoundation, Vision para el texto de las capturas y SpeechAnalyzer
+                para lo que se dice en audio y vídeo)
              ─► EmbeddingGemma 2 sobre llama.cpp (Metal), en un proceso auxiliar que se cierra al terminar
-             ─► un único archivo SQLite: un vector por imagen, página, pasaje, fotograma y 30 s de sonido,
-                más un índice de palabras (la búsqueda de código guarda otro, para el código)
+             ─► un único archivo SQLite: un vector por imagen, página, pasaje, fotograma, 30 s de sonido y frase
+                dicha, más un índice de palabras (la búsqueda de código guarda otro, para el código)
 tus palabras ─► la parte de texto del mismo modelo (~250 MB, solo mientras buscas)
              ─► los vectores más cercanos + las palabras exactas
 ```
@@ -192,7 +203,7 @@ cuatro procesos cada uno.
 también los encuentra por lo que muestran o dicen, y te lleva a la página o al momento. Conviven sin problema.
 
 **¿Por qué descarga 865 MB?** Es el modelo: la parte de texto (310 MB) y los codificadores de imagen y audio (555 MB).
-La app ocupa menos de 30 MB, archivos del modo demo incluidos.
+La app ocupa unos 60 MB, y más de la mitad son los archivos del modo demo (33 MB).
 
 **¿Ralentiza el Mac?** Solo pesa el primer pase; después lee únicamente lo nuevo. El modelo corre en un proceso aparte
 que se cierra al terminar, y la parte de búsqueda solo se carga mientras buscas.
@@ -201,7 +212,8 @@ que se cierra al terminar, y la parte de búsqueda solo se carga mientras buscas
 solo cubren inglés, bengalí y árabe, y Google advierte que el modelo no rinde igual en todos los idiomas. Hay dos
 límites que afectan a las palabras exactas, no al significado: dentro de las capturas las lee el reconocimiento de
 texto de Apple, que conoce unos 25 idiomas, y los idiomas que se escriben sin espacios, como el chino, el japonés o el
-tailandés, no se dividen en palabras.
+tailandés, no se dividen en palabras. Lo que se dice en audio y vídeo se transcribe en el idioma en que se habla, si
+es uno de los tres primeros idiomas del Mac, el inglés u otro cuyo modelo de voz ya tenga el Mac.
 
 **¿Por qué no encuentra un archivo?** Comprueba que está en una de tus carpetas, que está descargado en el Mac y que no
 está dentro de un proyecto de código, donde solo cuentan las capturas. Un archivo cifrado, con una etiqueta de

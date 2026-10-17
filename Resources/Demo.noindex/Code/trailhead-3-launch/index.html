@@ -1,0 +1,160 @@
+<!doctype html>
+<!--
+  contoso.com/trailhead-3 · v3, October 15 · Sara Navarro
+  Brief: Lucía's voice memo of October 7. Lead with the weight, mention the recycled fly, and never say it's the
+  lightest tent on the market. Every fact here comes from the spec sheet: if they ever disagree, the spec sheet wins.
+-->
+<html lang="es" data-phase="soon">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trailhead 3 · Contoso Outdoor</title>
+    <meta
+      name="description"
+      content="Trailhead 3: tienda de campaña para tres personas que pesa 1,9 kg y se monta en unos tres minutos. Desde el 3 de noviembre, por 249 €."
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="countdown.js"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <a class="brand" href="https://contoso.com">Contoso Outdoor</a>
+      <nav>
+        <a href="#montaje">Montaje</a>
+        <a href="#ficha">Ficha técnica</a>
+        <a href="https://contoso.com/tiendas">Tiendas</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="pitch">
+          <p class="kicker"><span class="soon">Nueva · 3 de noviembre</span><span class="live">Nueva · ya a la venta</span></p>
+          <h1>Trailhead 3</h1>
+          <p class="weight"><strong>1,9 kg</strong><span>300 g menos que la Trailhead 2.</span></p>
+          <p class="lede">Nuestra tienda más ligera. Para tres personas, con dos puertas, y montada en unos tres minutos.</p>
+
+          <div class="soon">
+            <p class="when">Llega el martes 3 de noviembre a las 9:00.</p>
+            <ol class="countdown" aria-hidden="true">
+              <li><b data-unit="days">--</b>días</li>
+              <li><b data-unit="hours">--</b>horas</li>
+              <li><b data-unit="minutes">--</b>minutos</li>
+              <li><b data-unit="seconds">--</b>segundos</li>
+            </ol>
+            <p class="visually-hidden" data-countdown-sentence></p>
+
+            <form class="notify" action="/api/trailhead-3/notify" method="post">
+              <label for="email">¿Te avisamos ese día?</label>
+              <div class="field">
+                <input id="email" name="email" type="email" autocomplete="email" placeholder="tu@correo.es" required />
+                <button type="submit">Avísame</button>
+              </div>
+              <p class="fine" data-notify-status>
+                Te escribiremos una sola vez, el 3 de noviembre a las 9:00, y después borraremos tu dirección.
+              </p>
+            </form>
+          </div>
+
+          <div class="live actions">
+            <a class="buy" href="https://contoso.com/trailhead-3/comprar">Comprar · 249 €</a>
+            <a class="quiet" href="https://contoso.com/tiendas">Pruébala en una tienda</a>
+          </div>
+        </div>
+
+        <!-- The spec sheet's drawing until the product photos arrive on October 28 (launch plan). -->
+        <figure class="art">
+          <svg viewBox="0 0 600 380" role="img" aria-label="La Trailhead 3 montada, en verde bosque">
+            <defs>
+              <linearGradient id="fly" x1="0" x2="1">
+                <stop offset=".35" stop-color="#3d7358" />
+                <stop offset="1" stop-color="#24493a" />
+              </linearGradient>
+            </defs>
+            <ellipse cx="300" cy="350" rx="290" ry="18" fill="rgba(0,0,0,.28)" />
+            <path d="M95 296 L18 352 M505 296 L582 352" stroke="#bfa57c" stroke-width="2" />
+            <path d="M60 340 Q300 -10 540 340 Z" fill="url(#fly)" />
+            <path d="M140 340 Q300 40 460 340" fill="none" stroke="#e2cfad" stroke-width="4" opacity=".55" />
+            <path d="M60 340 Q300 -10 540 340" fill="none" stroke="#e2cfad" stroke-width="5" />
+            <path d="M228 340 Q300 150 372 340 Z" fill="#1d3a2e" />
+            <path d="M300 246 V340" stroke="rgba(0,0,0,.35)" stroke-width="2" stroke-dasharray="5 4" />
+          </svg>
+          <figcaption>
+            <ul class="colors">
+              <li><i class="forest"></i>Verde bosque</li>
+              <li><i class="sand"></i>Arena</li>
+            </ul>
+          </figcaption>
+        </figure>
+      </section>
+
+      <!-- The same three numbers as the poster in the stores' kit (Marta's campaign ideas). -->
+      <section class="numbers" aria-label="En tres cifras">
+        <p><strong>1,9 kg</strong>la tienda entera</p>
+        <p><strong>3 personas</strong>y dos puertas</p>
+        <p><strong>3 minutos</strong>para montarla sin ayuda</p>
+      </section>
+
+      <section class="features">
+        <article>
+          <h2>Dos puertas, dos ábsides</h2>
+          <p>Cada uno sale por su lado y las mochilas duermen fuera. Nadie pasa por encima de nadie.</p>
+        </article>
+        <article>
+          <h2>Varillas con código de colores</h2>
+          <p>La verde, en las esquinas verdes; la de color arena, en las de color arena. Sale a la primera.</p>
+        </article>
+        <article>
+          <h2>Doble techo de poliéster reciclado</h2>
+          <p>Ripstop con una columna de agua de 3.000 mm, hecho con poliéster reciclado.</p>
+        </article>
+        <article>
+          <h2>Funda de reparación en la bolsa</h2>
+          <p>
+            Si una varilla se rompe en ruta, desliza la funda sobre la rotura, sujétala con cinta y sigue. Las varillas
+            tienen cinco años de garantía.
+          </p>
+        </article>
+      </section>
+
+      <section id="montaje" class="setup">
+        <h2>Montada en cinco pasos</h2>
+        <ol>
+          <li>Extiende la tienda interior con la puerta de espaldas al viento y clava las cuatro esquinas.</li>
+          <li>Monta las varillas: la verde en las esquinas verdes y la de color arena en las de color arena.</li>
+          <li>Engancha la tienda interior a las varillas, desde las esquinas hasta arriba.</li>
+          <li>Echa el doble techo por encima, haz coincidir sus pestañas de colores con las varillas y abrocha las esquinas.</li>
+          <li>Clava y tensa los vientos, para que el doble techo no toque la tienda interior.</li>
+        </ol>
+        <video class="soon" src="media/trailhead-3-teaser.mp4" controls preload="none" playsinline></video>
+        <video class="live" src="media/trailhead-3-setup-guide.mp4" controls preload="none" playsinline></video>
+      </section>
+
+      <section id="ficha" class="specs">
+        <h2>Ficha técnica</h2>
+        <table>
+          <tr><th scope="row">Plazas</th><td>3 personas</td></tr>
+          <tr><th scope="row">Peso</th><td>1,9 kg, 300 g menos que la Trailhead 2</td></tr>
+          <tr><th scope="row">Plegada</th><td>46 × 15 cm</td></tr>
+          <tr><th scope="row">Suelo</th><td>215 × 180 cm · altura 110 cm</td></tr>
+          <tr><th scope="row">Puertas y ábsides</th><td>2 puertas y 2 ábsides</td></tr>
+          <tr><th scope="row">Varillas</th><td>2 de aluminio, con código de colores: verde y arena</td></tr>
+          <tr><th scope="row">Doble techo</th><td>Ripstop de poliéster reciclado, 3.000 mm</td></tr>
+          <tr><th scope="row">Montaje</th><td>Unos 3 minutos</td></tr>
+          <tr>
+            <th scope="row">En la bolsa</th>
+            <td>Tienda interior y doble techo · 2 varillas · 10 piquetas · 4 vientos · funda de reparación · bolsa</td>
+          </tr>
+          <tr><th scope="row">Garantía</th><td>2 años · las varillas, 5 años</td></tr>
+          <tr><th scope="row">Colores</th><td>Verde bosque y arena</td></tr>
+          <tr><th scope="row">Precio</th><td>249 €</td></tr>
+        </table>
+      </section>
+    </main>
+
+    <footer>
+      <p>Contoso Outdoor · Madrid. Enviamos todos los pedidos desde nuestro almacén de Zaragoza.</p>
+      <p>Contoso Outdoor es una empresa ficticia y esta página es contenido de ejemplo.</p>
+    </footer>
+  </body>
+</html>

@@ -1,9 +1,9 @@
-"""The agent's tools. File Search runs inside Foundry; the two functions run here, in the web app, because they
+"""The agent's tools. File Search runs inside Foundry; the three functions run here, in the web app, because they
 reach systems Foundry can't: the orders lakehouse in Microsoft Fabric and the returns API.
 
 They run as the app's managed identity, which can do only what they need (checklist §5): read orders, as a Viewer
-of the Fabric workspace, and open returns, with the returns API's Returns.Write role. Neither can refund, cancel an
-order or change an address, so the agent can't either.
+of the Fabric workspace, and open returns and book their pickups, with the returns API's Returns.Write role. None
+of them can refund, cancel an order or change an address, so the agent can't either.
 """
 
 from __future__ import annotations
@@ -21,6 +21,8 @@ import httpx
 import pyodbc
 from azure.ai.projects.models import FileSearchTool, FunctionTool, Tool
 from azure.identity import DefaultAzureCredential
+
+from src import pickup_slots
 
 log = logging.getLogger(__name__)
 credential = DefaultAzureCredential()
@@ -64,6 +66,28 @@ CREATE_RETURN = FunctionTool(
     strict=True,
 )
 
+BOOK_PICKUP = FunctionTool(
+    name="book_pickup",
+    description="Books a courier to collect a return from the delivery address. Open the return first, and tell the "
+                "customer what the pickup costs before you book it.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "order_id": {"type": "string", "description": "The order number, e.g. 48213."},
+            "reason": {
+                "type": "string",
+                "enum": ["damaged", "wrong_item", "not_as_described", "no_longer_needed"],
+                "description": "The reason the return was opened with. It decides the fee.",
+            },
+            "date": {"type": "string", "description": "The day, as YYYY-MM-DD: Monday to Saturday."},
+            "slot": {"type": "string", "enum": list(pickup_slots.SLOTS)},
+        },
+        "required": ["order_id", "reason", "date", "slot"],
+        "additionalProperties": False,
+    },
+    strict=True,
+)
+
 
 def policy_search() -> FileSearchTool:
     """The policy PDFs, one file per page (python -m src.agent policies)."""
@@ -72,10 +96,10 @@ def policy_search() -> FileSearchTool:
 
 def agent_tools() -> list[Tool]:
     """Everything a new version of the agent may use."""
-    return [policy_search(), LOOKUP_ORDER, CREATE_RETURN]
+    return [policy_search(), LOOKUP_ORDER, CREATE_RETURN, BOOK_PICKUP]
 
 
-# TODO(sara): one 10-second budget for both tools (checklist §5). httpx gives up after 5 seconds per step, but
+# TODO(sara): one 10-second budget for the tools in a turn (checklist §5). httpx gives up after 5 seconds per step, but
 #  pyodbc has no query timeout, so a slow lakehouse leaves the customer looking at "• • •" for as long as it takes.
 def call_tool(name: str, arguments: str) -> str:
     """Runs a function the agent asked for and gives it the result, as JSON.
@@ -87,7 +111,7 @@ def call_tool(name: str, arguments: str) -> str:
         values = json.loads(arguments)
         order = str(values.get("order_id", "?"))
         result = FUNCTIONS[name](**values)
-    except ValueError as error:  # our own words, from order_number()
+    except ValueError as error:  # our own words, from order_number() and pickup_slots
         result = {"error": str(error)}
     except Exception as error:  # noqa: BLE001
         log.warning("%s failed for order %s: %s", name, order, type(error).__name__)
@@ -169,4 +193,30 @@ def create_return(order_id: str, reason: str, resolution: str) -> dict[str, Any]
     return {key: body[key] for key in ("rma", "resolution", "label_emailed", "replacement") if key in body}
 
 
-FUNCTIONS: dict[str, Callable[..., dict[str, Any]]] = {"lookup_order": lookup_order, "create_return": create_return}
+def book_pickup(order_id: str, reason: str, date: str, slot: str) -> dict[str, Any]:
+    """Books Fabrikam Logistics to collect the order's return, which must be open already. The courier texts the
+    customer 30 minutes before arriving. Until CX-152, Pablo's team confirms each booking with them by hand."""
+    number = order_number(order_id)
+    try:
+        day = dt.date.fromisoformat(date)
+    except ValueError:
+        raise ValueError("Dates go as YYYY-MM-DD, like 2026-10-16.") from None
+    pickup_slots.check(day, slot)
+    if os.environ.get("RETURNS_DRY_RUN") == "1":  # evaluations and local runs: no courier comes
+        return {"pickup": "PU-DRYRUN", "date": day, "slot": slot, "fee_eur": pickup_slots.fee(reason)}
+    token = credential.get_token("api://contoso-returns/.default").token
+    response = httpx.post(
+        f"{os.environ['RETURNS_API']}/orders/{number}/return/pickup",
+        json={"date": day.isoformat(), "slot": slot, "channel": "support-agent"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    if response.status_code == 409:  # one pickup per return, and only a person can move it
+        return {"error": "This return already has a pickup. Changing it is for a person: offer Talk to a person."}
+    response.raise_for_status()
+    body = response.json()
+    return {key: body[key] for key in ("pickup", "date", "slot", "fee_eur") if key in body}
+
+
+FUNCTIONS: dict[str, Callable[..., dict[str, Any]]] = {
+    "lookup_order": lookup_order, "create_return": create_return, "book_pickup": book_pickup,
+}

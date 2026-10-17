@@ -1,0 +1,88 @@
+CUSTOMER INTERVIEW – NORTHWIND TRADERS
+Contoso Outdoor · product team · Lucía Romero · Tuesday, October 13, 2026
+
+
+WHO AND WHEN
+
+Raj Mehta, head of buying at Northwind Traders: outdoor and travel gear, 24
+stores in France, an online shop and a warehouse in Lyon. They have sold the
+Trailhead 2 since 2024. He has seen the Trailhead 3 under NDA and knows that
+nothing about it is public before Tuesday, November 3, at 9:00.
+
+Call on Tuesday, October 13, from 12:00 to 12:45. Raj phoned Emma, in key
+accounts, to place an order, and Emma recorded that part with his OK: "Call –
+Northwind Traders, Trailhead 3 order", in Audio. Then she brought me in for
+the half-hour interview I had asked her for.
+
+
+THE ORDER, IN SHORT
+
+  - 300 Trailhead 3 for their spring catalog, at 249 € list with the 12 %
+    discount for orders over 250 units: 74,700 € list, 65,736 € after the
+    discount.
+  - Two deliveries to the warehouse in Lyon, same discount for both: 150 tents
+    in the first week of March and 150 in the first week of April.
+  - Emma sends the quote today. Raj gets the purchase order signed this week.
+  - Colors: he'll split the 300 in the purchase order. Sand sells better in
+    their stores in the south, forest green in the north.
+
+
+WHAT THEIR CUSTOMERS ASK ABOUT A TENT
+
+  - Weight, first. "Under two kilos is the line people look at." At 1.9 kg the
+    Trailhead 3 is under it; at 2.2 kg the Trailhead 2 never was.
+  - Pitching it alone, in the wind or in the dark. His staff will pitch one in
+    the shop to show the color-coded poles: if it goes up in three minutes in
+    front of a customer, it sells itself.
+  - Room for three with their bags: the two doors and two vestibules answer it
+    before people ask.
+  - What happens if a pole snaps on a trip. The repair sleeve in the bag and
+    five years of warranty on the poles (two on the rest) are the answer he
+    wants printed in the catalog.
+  - The recycled fly matters to younger customers, but nobody buys a tent for
+    the fabric alone.
+
+
+RETURNS: WHERE IT HURTS
+
+Northwind takes back what their customers return in store. When a Contoso
+product is faulty, it comes back to us through a wholesale return by email: a
+form, photos, an RMA number and a courier they book themselves. Raj: "Two
+weeks of emails for one broken pole is too long."
+
+He asked whether his store staff could use our returns assistant, the way our
+own customers do since September: an RMA number and a courier pickup in one
+chat. Not today. From November 2 the pilot opens to our own sales team, not to
+partners, and an outside company would need its own sign-in and a check that
+every order it asks about is its own (CX-149). I said I'd take it to the 2027
+planning, and that's all I promised.
+
+
+WHAT WE CAN AND CAN'T SAY
+
+Raj wanted "the lightest three-person tent on the market" for the catalog. No:
+we can't prove it, and legal has asked us never to say it. What we can say:
+1.9 kg, 300 g lighter than the Trailhead 2, up in three minutes. Marta sends
+Northwind the press kit and the product photos on October 28, under the same
+embargo, and reads their catalog copy before it goes to print
+(prensa@contoso.com).
+
+
+WHAT WE PROMISED
+
+  - Emma: the quote, today, with both delivery dates.
+  - Marta: press kit and photos on October 28; a read of their catalog page
+    before printing.
+  - Lucía: an answer on wholesale returns in the chat after the 2027 planning,
+    yes or no.
+  - Raj: the signed purchase order this week, with the color split.
+
+
+IN HIS WORDS
+
+  - "Under two kilos is the line people look at."
+  - "If it goes up in three minutes in front of a customer, it sells itself."
+  - "Two weeks of emails for one broken pole is too long."
+
+
+Contoso Outdoor and Northwind Traders are fictitious companies used for demos.

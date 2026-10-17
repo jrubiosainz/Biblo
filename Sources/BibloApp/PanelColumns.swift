@@ -330,7 +330,12 @@ private struct CardCell: View {
             }
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(Brand.ink)
-            if let excerpt = row.excerpt, row.matchedWords, row.kind != .code, row.segment != .chunk {
+            if let excerpt = row.excerpt, row.segment == .speech {
+                Text(highlighted("“\(excerpt)”", size: 12))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            } else if let excerpt = row.excerpt, row.matchedWords, row.kind != .code, row.segment != .chunk {
                 Text(highlighted(excerpt, size: 12))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)

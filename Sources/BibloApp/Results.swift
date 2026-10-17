@@ -79,6 +79,7 @@ struct ResultRow: Identifiable, Equatable {
         case .page, .pageImage: return "p. \(Int(loc))"
         case .frame: return Self.clock(loc)
         case .audio: return kind == .video ? "♪ \(Self.clock(loc))" : Self.clock(loc)
+        case .speech: return Self.clock(loc)
         case .lines: return Int(loc) == Int(locEnd ?? loc) ? "L\(Int(loc))" : "L\(Int(loc))–\(Int(locEnd ?? loc))"
         case .cells: return span
         default: return nil
@@ -101,8 +102,11 @@ struct ResultRow: Identifiable, Equatable {
 
     var duration: Double? { info["duration"].flatMap(Double.init) }
 
-    /// Why it's here, in a few words: "Matches the picture", "Matches the frame at 0:06".
+    /// Why it's here, in a few words: "Matches the picture", "Matches the frame at 0:06", "Matches what's said at 1:12".
     var reason: String {
+        if segment == .speech, let loc {
+            return matchedMeaning ? "Matches what's said at \(Self.clock(loc))" : "Says your words at \(Self.clock(loc))"
+        }
         guard matchedMeaning else { return matchedWords && segment != .name ? "Has your words" : "Matches its name" }
         let place = loc.map(Self.clock) ?? ""
         let page = loc.map { "page \(Int($0))" } ?? "a page"
@@ -111,6 +115,7 @@ struct ResultRow: Identifiable, Equatable {
         case .ocr: return "Matches the text in it"
         case .frame: return "Matches the frame at \(place)"
         case .audio: return kind == .video ? "Matches the sound at \(place)" : "Matches what's heard at \(place)"
+        case .speech: return "Matches what's said at \(place)"
         case .page: return "Matches the text on \(page)"
         case .pageImage where isDeck: return "Matches a picture on slide \(loc.map { Int($0) } ?? 1)"
         case .pageImage: return "Matches \(page)"
@@ -313,8 +318,11 @@ extension ResultRow {
 
     static let spanish = Locale(identifier: "es_ES")
 
-    /// `reason`, as the panel says it: "Por el fotograma de 0:06".
+    /// `reason`, as the panel says it: "Por el fotograma de 0:06", "Por lo que se dice en 1:12".
     var spanishReason: String {
+        if segment == .speech, let loc {
+            return matchedMeaning ? "Por lo que se dice en \(Self.clock(loc))" : "Dice tus palabras en \(Self.clock(loc))"
+        }
         guard matchedMeaning else { return matchedWords && segment != .name ? "Tiene tus palabras" : "Por su nombre" }
         let place = loc.map(Self.clock) ?? ""
         let page = loc.map { "la página \(Int($0))" } ?? "una página"
@@ -323,6 +331,7 @@ extension ResultRow {
         case .ocr: return "Por el texto que contiene"
         case .frame: return "Por el fotograma de \(place)"
         case .audio: return kind == .video ? "Por el sonido en \(place)" : "Por lo que se oye en \(place)"
+        case .speech: return "Por lo que se dice en \(place)"
         case .page: return "Por el texto de \(page)"
         case .pageImage where isDeck: return "Por una imagen de la diapositiva \(loc.map { Int($0) } ?? 1)"
         case .pageImage: return "Por \(page)"

@@ -214,6 +214,8 @@ extension AppModel {
             let which = files == 1 ? "1 archivo largo" : files > 0 ? "\(Self.number(files)) archivos largos"
                 : "los archivos largos"
             return "Terminando de leer \(which) · \(Self.percent(done, of: total)) %"
+        case .listening(let done, let total):
+            return "Escuchando grabaciones · \(Self.number(done)) de \(Self.number(total))"
         case .idle:
             if let line = spanishDownloadLine { return line }
             if let code = status.code.indexing, code.total > 0 {
@@ -462,8 +464,8 @@ private struct CodeHint: View {
     let controller: SearchPanelController
 
     static let examples = AppSettings.demo
-        ? ["code: crear un agente con una herramienta", "code: desplegar el modelo con Bicep",
-           "code: evaluar las respuestas del agente"]
+        ? ["code: reintentar cuando el modelo devuelve 429", "code: comprobar que el pedido es del cliente",
+           "code: cuenta atrás del lanzamiento"]
         : ["code: reintentar una petición con espera", "code: dónde se guardan los ajustes",
            "code: leer las opciones de la línea de comandos"]
 

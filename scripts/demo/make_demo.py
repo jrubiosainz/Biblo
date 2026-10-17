@@ -99,19 +99,27 @@ body{{font-family:system-ui,"Helvetica Neue",Helvetica,Arial,sans-serif;color:#0
 {css}</style></head><body>{body}</body></html>"""
 
 
+def headless(arguments: list, made: Path) -> None:
+    """Runs the headless browser, which writes `made`. Edge sometimes crashes while quitting ("Teardown watchdog
+    expired") after it has written the file: that's no failure."""
+    made.unlink(missing_ok=True)
+    result = subprocess.run([str(a) for a in arguments], capture_output=True, text=True)
+    if result.returncode != 0 and not (made.exists() and "written to file" in result.stderr):
+        sys.exit(f"failed: {' '.join(map(str, arguments))}\n{result.stderr[-3000:]}")
+
+
 def render(document: str, size: tuple[int, int], scale: float = 1, transparent: bool = False) -> Image.Image:
     """A page drawn by the browser: `size` CSS pixels, times `scale` in the picture."""
     source = WORK / f"page{next(_pages)}.html"
     source.write_text(document, encoding="utf-8")
     shot = WORK / "shot.png"
-    shot.unlink(missing_ok=True)
     arguments = [BROWSER, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run",
                  "--no-default-browser-check", "--run-all-compositor-stages-before-draw",
                  f"--user-data-dir={WORK / 'browser'}", f"--window-size={size[0]},{size[1]}",
                  f"--force-device-scale-factor={scale}", f"--screenshot={shot}"]
     if transparent:
         arguments.append("--default-background-color=00000000")
-    run(*arguments, source.as_uri())
+    headless([*arguments, source.as_uri()], shot)
     image = Image.open(shot)
     image.load()
     return image
@@ -120,8 +128,9 @@ def render(document: str, size: tuple[int, int], scale: float = 1, transparent: 
 def print_pdf(document: str, path: Path) -> None:
     source = WORK / f"page{next(_pages)}.html"
     source.write_text(document, encoding="utf-8")
-    run(BROWSER, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-        f"--user-data-dir={WORK / 'browser'}", "--no-pdf-header-footer", f"--print-to-pdf={path}", source.as_uri())
+    headless([BROWSER, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+              f"--user-data-dir={WORK / 'browser'}", "--no-pdf-header-footer", f"--print-to-pdf={path}",
+              source.as_uri()], path)
 
 
 def save_png(image: Image.Image, path: Path) -> None:
@@ -136,7 +145,11 @@ def textutil(document: str, path: Path, title: str) -> None:
     """A Word or RTF file from HTML. The author is set: textutil would put the Mac's owner there."""
     source = WORK / f"page{next(_pages)}.html"
     source.write_text(document, encoding="utf-8")
-    run("textutil", "-convert", path.suffix[1:], "-title", title, "-author", "Contoso", "-output", path, source)
+    # textutil decomposes the accents in the name it writes (é as e + ´), so it writes to a plain name and Python gives
+    # the file its real one, composed like every other name here and like the keys in DATES.
+    made = source.with_suffix(path.suffix)
+    run("textutil", "-convert", path.suffix[1:], "-title", title, "-author", "Contoso", "-output", made, source)
+    shutil.move(made, path)
 
 
 _logos: dict[tuple, Path] = {}
@@ -593,7 +606,13 @@ box-shadow:0 4px 16px rgba(31,42,36,.06);font:15.5px system-ui;color:#9ca3af}
 .composer .caret{display:inline-block;width:2px;height:20px;margin-left:1px;vertical-align:-4px;background:#1f4d3a}
 .send{margin-left:auto;width:38px;height:38px;border-radius:11px;background:#d9d4c7;display:grid;place-items:center;
 color:#fff;font:700 18px system-ui}
-.composer.typed .send{background:#1f4d3a}"""
+.composer.typed .send{background:#1f4d3a}
+.typing{align-self:flex-start;padding:11px 18px;border-radius:18px;border-bottom-left-radius:6px;background:#fff;
+border:1px solid #e7e5df;font:800 16px system-ui;letter-spacing:3px;color:#a8a29e}
+.notice{align-self:flex-start;display:flex;align-items:flex-start;gap:10px;max-width:600px;padding:12px 16px;
+border-radius:14px;background:#fef2f2;border:1px solid #fecaca;font:14.5px/1.45 system-ui;color:#991b1b}
+.notice:before{content:"!";flex:none;width:20px;height:20px;margin-top:1px;border-radius:50%;background:#dc2626;
+display:grid;place-items:center;font:800 12.5px system-ui;color:#fff}"""
 
 GREETING = ("agent", "Hi! I'm the Contoso Outdoor assistant. I can check your orders, start a return or help you "
                      "choose gear.", [])
@@ -608,8 +627,12 @@ DONE = ("agent", "Done! A new Trailhead 2 ships today by express delivery and sh
         ["Shipping options.pdf · p. 1"])
 
 
-def chat(thread: list, draft: str = "", chips: bool = False) -> str:
-    """The Contoso Outdoor support chat (a fictitious shop) in a browser, at one moment."""
+CHIPS = ["Track my order", "Start a return", "Which tent fits four?"]
+
+
+def chat(thread: list, draft: str = "", chips: bool | list[str] = False) -> str:
+    """The Contoso Outdoor support chat (a fictitious shop) in a browser, at one moment. `chips` is True for the
+    usual suggestions, or other ones."""
     parts = []
     for item in thread:
         kind = item[0]
@@ -623,9 +646,13 @@ def chat(thread: list, draft: str = "", chips: bool = False) -> str:
             _, name, arguments, running = item
             parts.append(f'<div class="tool{" running" if running else ""}">{name}<span>({esc(arguments)})</span>'
                          '</div>')
+        elif kind == "typing":
+            parts.append('<div class="typing">• • •</div>')
+        elif kind == "notice":
+            parts.append(f'<div class="notice">{esc(item[1])}</div>')
     if chips:
-        parts.append('<div class="chips"><span class="chip">Track my order</span><span class="chip">Start a return'
-                     '</span><span class="chip">Which tent fits four?</span></div>')
+        labels = "".join(f'<span class="chip">{esc(label)}</span>' for label in (CHIPS if chips is True else chips))
+        parts.append(f'<div class="chips">{labels}</div>')
     composer = (f'<div class="composer typed">{esc(draft)}<span class="caret"></span><span class="send">↑</span></div>'
                 if draft else '<div class="composer">Ask about an order, a return or our gear…<span class="send">↑'
                               '</span></div>')
@@ -843,12 +870,42 @@ DATES = {
     "Images/Copilot adoption by team – Q3 2026.png": "2026-10-02 09:41",
     "Slides/Microsoft Fabric – platform overview.pptx": "2026-10-07 18:40",
     "Slides/Taller práctico – agentes con Microsoft Foundry.pptx": "2026-10-09 13:15",
-    "Code/contoso-support-agent/infra/resources.bicep": "2026-10-08 15:58",
-    "Code/contoso-support-agent/README.md": "2026-10-08 17:03",
+    "Code/contoso-support-agent/infra/resources.bicep": "2026-10-15 11:52",
+    "Code/contoso-support-agent/README.md": "2026-10-15 18:05",
     "Code/contoso-support-agent/src/agent.py": "2026-10-08 11:27",
-    "Code/contoso-support-agent/evals/sample.jsonl": "2026-10-09 10:31",
+    "Code/contoso-support-agent/evals/sample.jsonl": "2026-10-13 14:35",
     "Code/contoso-support-agent/src/evaluate.py": "2026-10-09 10:48",
     "Code/fabric-notebooks/add_order_history_shortcut.py": "2026-10-09 09:12",
+    # The weeks after: alerts, the MCP server, evals in CI, the launch page and the docs around them.
+    "Code/contoso-support-agent/src/pickup_slots.py": "2026-10-09 17:40",
+    "Code/contoso-support-agent/src/tools.py": "2026-10-13 10:05",
+    "Code/contoso-support-agent/prompts/returns-assistant.md": "2026-10-13 14:05",
+    "Code/contoso-support-agent/src/orders_server.py": "2026-10-14 09:30",
+    "Code/contoso-support-agent/pyproject.toml": "2026-10-14 09:30",
+    "Code/contoso-support-agent/evals/README.md": "2026-10-14 11:30",
+    "Code/contoso-support-agent/infra/alerts.bicep": "2026-10-15 11:45",
+    "Code/contoso-support-agent/docs/adr/0007-managed-identity.md": "2026-10-16 15:10",
+    "Code/fabric-notebooks/pickup_slots_capacity.sql": "2026-10-13 17:20",
+    "Code/fabric-notebooks/returns_forecast.py": "2026-10-14 10:05",
+    "Code/fabric-notebooks/csat_by_week.ipynb": "2026-10-15 16:20",
+    "Code/fabric-notebooks/README.md": "2026-10-15 16:35",
+    "Code/scripts/summit_badges.py": "2026-10-09 15:40",
+    "Code/scripts/social_cuts.sh": "2026-10-14 19:20",
+    "Code/scripts/export_csat.py": "2026-10-15 16:50",
+    "Code/trailhead-3-launch/countdown.js": "2026-10-14 17:45",
+    "Code/trailhead-3-launch/styles.css": "2026-10-15 12:10",
+    "Code/trailhead-3-launch/index.html": "2026-10-15 12:30",
+    "Code/trailhead-3-launch/README.md": "2026-10-15 15:25",
+    "Documents/Meeting rooms – 3rd floor.txt": "2026-09-22 08:50",
+    "Documents/Phishing – what to do if you clicked.html": "2026-10-05 09:05",
+    "Documents/Calendario laboral 2027.md": "2026-10-07 12:40",
+    "Documents/Onboarding checklist.md": "2026-10-09 10:15",
+    "Documents/GitHub Copilot – features at a glance.md": "2026-10-13 12:20",
+    "Documents/Customer interview – Northwind Traders.txt": "2026-10-13 17:20",
+    "Documents/Release notes v0.4.md": "2026-10-14 15:50",
+    "Documents/Ideas – campaña Trailhead 3.txt": "2026-10-14 18:40",
+    "Documents/Runbook – returns assistant incidents.md": "2026-10-15 17:35",
+    "Documents/Newsletter – Datos e IA, octubre.html": "2026-10-16 09:10",
 }
 # Projects written over part of the pilot, not all of it.
 SPANS = {
@@ -910,19 +967,25 @@ def main() -> None:
 
 
 
-@builder
-def screencast():
-    """Video/: the support chat answering, recorded as ⇧⌘5 records a part of the screen (no sound)."""
+def record_chat(states: list, path: Path) -> None:
+    """The support chat going through `states` (thread, draft, chips, seconds), recorded as ⇧⌘5 records a part of
+    the screen (no sound)."""
     size, scale, margin = (1180, 800), 1.5, 56
     box = [int(v * scale) for v in (margin, margin - 16, margin + size[0], margin - 16 + size[1])]
-    states = []
-    for thread, draft, chips, hold in CHAT_STATES:
+    frames = []
+    for thread, draft, chips, hold in states:
         shot = render(browser_window(chat(thread, draft, chips), size), (size[0] + 112, size[1] + 112), scale, True)
         window_only = shot.crop(box)
         frame = Image.new("RGB", window_only.size, (228, 228, 231))
         frame.paste(window_only, (0, 0), window_only)
-        states.append((frame, hold))
-    recording(states, out("Video/Screen Recording 2026-10-09 at 12.41.33.mov"))
+        frames.append((frame, hold))
+    recording(frames, path)
+
+
+@builder
+def screencast():
+    """Video/: the support chat answering, recorded as ⇧⌘5 records a part of the screen (no sound)."""
+    record_chat(CHAT_STATES, out("Video/Screen Recording 2026-10-09 at 12.41.33.mov"))
 
 
 # Narrated explainers, made only of words and shapes: no logos in videos (assets/SOURCES.md).
@@ -1092,13 +1155,13 @@ def audio():
     ], {"S": ("Samantha", "en_US"), "D": ("Daniel", "en_GB")},
         out("Audio/AI in Two Minutes – Ep. 12 – What is an AI agent.m4a"))
 
-    conversation([("M", "Nota rápida para el jueves. En la demo de Microsoft Fabric para el equipo de ventas quiero "
-                        "enseñar tres cosas. Primero, OneLake: que los pedidos y las devoluciones están en un único "
-                        "lago de datos, sin copias. Segundo, un informe de Power BI en modo Direct Lake, que lee las "
-                        "tablas directamente, sin importarlas. Y tercero, Copilot en Fabric: pedirle en lenguaje "
-                        "natural un resumen de ventas por región. Ojo, usar solo los datos de ejemplo de Contoso, "
-                        "nada de datos reales de clientes. Y llevar el portátil cargado.")],
-                 {"M": ("Mónica", "es_ES")}, out("Audio/Nota de voz – demo de Fabric.m4a"))
+    conversation([("M", "Quick note for Thursday. In the Microsoft Fabric demo for the sales team, I want to show "
+                        "three things. First, OneLake: orders and returns live in a single data lake, with no copies. "
+                        "Second, a Power BI report in Direct Lake mode, which reads the tables directly, without "
+                        "importing them. And third, Copilot in Fabric: ask it, in plain language, for a summary of "
+                        "sales by region. Remember, only use the sample data, no real customer data. And bring a "
+                        "charged laptop.")],
+                 {"M": ("Samantha", "en_US")}, out("Audio/Nota de voz – demo de Fabric.m4a"))
 
     conversation([("K", "Reminder for Monday's deck. On the Copilot slide, use the official logo files only: "
                         "download them from the brand pages, don't screenshot them from a website. No recoloring, "
@@ -1113,15 +1176,15 @@ def audio():
         ("R", "Seguimos con cincuenta usuarios del equipo de soporte. Esta semana el agente resolvió el sesenta y dos "
               "por ciento de las consultas de devoluciones sin pasarlas a una persona."),
         ("M", "¿Y la satisfacción?"),
-        ("R", "Cuatro coma cinco sobre cinco en las encuestas. Y el tiempo medio de resolución bajó de once minutos a "
+        ("R", "Un cuatro y medio sobre cinco en las encuestas. Y el tiempo medio de resolución bajó de once minutos a "
               "cuatro."),
         ("M", "¿Algún problema?"),
-        ("R", "Dos. Con pedidos de hace más de un año, la herramienta de búsqueda de pedidos falla. Y en tres casos "
-              "el agente citó una política de devoluciones antigua."),
+        ("R", "Dos. La herramienta de búsqueda no encuentra los pedidos de hace más de un año. Y en tres casos, el "
+              "agente citó una política de devoluciones antigua."),
         ("M", "Vale. Acciones: actualizar el índice de documentos, añadir esos casos al conjunto de evaluación, y "
               "repetir las evaluaciones antes de ampliar el piloto a ventas."),
         ("R", "Perfecto. Hablamos el viernes que viene."),
-    ], {"M": ("Mónica", "es_ES"), "R": ("Reed", "es_ES")}, out("Audio/Resumen semanal – piloto de agentes.m4a"))
+    ], {"M": ("Mónica", "es_ES"), "R": ("Paulina", "es_MX")}, out("Audio/Resumen semanal – piloto de agentes.m4a"))
 
 
 # MARK: Documents
@@ -2002,4 +2065,9 @@ def slides():
 
 
 if __name__ == "__main__":
+    # The rest of the files are made by more_*.py, which import their helpers from here: as "make_demo", this module.
+    sys.modules.setdefault("make_demo", sys.modules[__name__])
+    import more_sound  # noqa: F401, E402
+    import more_pictures  # noqa: F401, E402
+    import more_papers  # noqa: F401, E402
     main()

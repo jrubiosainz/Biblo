@@ -1,0 +1,56 @@
+MEETING ROOMS – 3RD FLOOR
+Contoso Madrid · office services · updated Tuesday, September 22, 2026
+
+
+THE ROOMS
+
+  Room          Seats   What's in it
+  Ártico          12    Screen, camera and microphones for hybrid meetings
+  Sáhara           8    Screen
+  Atlas            6    Screen
+  Amazonas         4    A round table and no screen: bring your laptop
+  Call booths      1    Three booths next to the IT desk, for calls alone
+
+Book a room in Outlook: add it to the meeting the way you add a person. The
+call booths can't be booked; if someone is waiting, 30 minutes at most.
+
+Ártico is the only room with a camera, so hybrid meetings and workshops go
+first there. A booking nobody turns up to within 15 minutes is released for
+others.
+
+
+THE KITCHEN
+
+Coffee, water and a microwave, at the east end of the floor, past the open
+space. The newcomers' coffee is here on Fridays at 10:00. Please leave cups in
+the dishwasher, not in the sink.
+
+
+LOCKERS
+
+  - 16 lockers next to the kitchen, numbered 1 to 16, each with a four-digit
+    code.
+  - If you need one for a while, ask the IT desk.
+  - Locker 14 belongs to the IT desk. When your new or repaired laptop is
+    ready, they leave it there and give you the code by phone.
+  - We never write locker codes down, here or anywhere else. Lost one? The IT
+    desk resets it.
+
+
+THE IT DESK
+
+Megan is at the IT desk, between the kitchen and the call booths, from 9:00 to
+18:00: a new laptop, a broken charger, a password that doesn't work, a strange
+email. Any other time, call extension 3300, which answers 24 hours a day, or
+write to it@contoso.com. If you think you clicked a phishing link, call
+straight away.
+
+
+YOUR FIRST DAY
+
+Reception is on the ground floor, from 8:30 to 10:00, with your DNI or
+passport. Then take the lifts to the 3rd floor: the plan next to them shows
+where everything is, and where you are.
+
+
+Contoso is a fictitious company used for demos.

@@ -236,9 +236,11 @@ public final class Indexer {
 
     /// Files read and embedded together (images 8 at a time, other files one by one), or one step of a long file
     /// (`step`: the pages of a PDF or the chunks of a document to read, from 0). The first step comes with the file.
+    /// `listen`: a recording indexed before, to transcribe (`listen(shouldStop:onEvent:)`).
     struct Job: Sendable {
         let files: [FileRecord]
         var step: Range<Int>?
+        var listen = false
     }
 
     /// Images and screenshots go to the model 8 at a time; other files one by one.
@@ -315,9 +317,11 @@ public final class Indexer {
         /// `chunks`: the ones in `read` (from 0) of the document's `total` (counted up to `IndexOptions.maxChunks` + 1).
         /// A deck's chunks are its slides, and `pictures` the pictures on them.
         case doc(chunks: [String], read: Range<Int>, total: Int, characters: Int, pictures: [SlideExtractor.Picture])
-        case audio(pieces: [MediaPiece], duration: Double)
-        case video(frames: [MediaPiece], sound: [MediaPiece], duration: Double)
+        case audio(pieces: [MediaPiece], duration: Double, heard: Heard)
+        case video(frames: [MediaPiece], sound: [MediaPiece], duration: Double, heard: Heard)
         case code(CodeExtractor.File)
+        /// What's said in a recording indexed before (`Job.listen`).
+        case speech(Heard)
     }
 
     struct ReadyImage: Sendable {
@@ -360,6 +364,10 @@ public final class Indexer {
         let batch = job.files
         var prepared = Prepared(batch: batch, step: job.step, folder: folder)
         let url = URL(fileURLWithPath: batch[0].path)
+        if job.listen {
+            prepared.payload = .speech(options.speech ? Speech.heard(in: url) : .off)
+            return prepared
+        }
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             switch batch[0].kind {
@@ -414,7 +422,9 @@ public final class Indexer {
                 let (pieces, duration) = try runBlocking {
                     try await AudioExtractor.windows(of: url, window: window, hop: hop, to: folder)
                 }
-                prepared.payload = .audio(pieces: pieces, duration: duration)
+                // No windows: silent or too short, and skipped.
+                let heard = options.speech && !pieces.isEmpty ? Speech.heard(in: url) : .off
+                prepared.payload = .audio(pieces: pieces, duration: duration, heard: heard)
             case .video:
                 let (interval, window, hop) = (options.frameInterval, options.audioWindow, options.audioHop)
                 let (frames, duration, hasAudio) = try runBlocking {
@@ -424,7 +434,8 @@ public final class Indexer {
                     ? try runBlocking { try await AudioExtractor.windows(of: url, window: window, hop: hop, to: folder) }
                         .pieces
                     : []
-                prepared.payload = .video(frames: frames, sound: sound, duration: duration)
+                let heard = options.speech ? hasAudio ? Speech.heard(in: url) : .nothing : .off
+                prepared.payload = .video(frames: frames, sound: sound, duration: duration, heard: heard)
             case .code:
                 prepared.payload = .code(try CodeExtractor.read(url, options: options))
             }
@@ -471,12 +482,14 @@ public final class Indexer {
             case .doc(let chunks, let read, let total, let characters, let pictures):
                 results[0] = try doc(batch[0], chunks: chunks, read: read, total: total, characters: characters,
                                      pictures: pictures, later: later)
-            case .audio(let pieces, let duration):
-                results[0] = try audio(batch[0], pieces: pieces, duration: duration)
-            case .video(let frames, let sound, let duration):
-                results[0] = try video(batch[0], frames: frames, sound: sound, duration: duration)
+            case .audio(let pieces, let duration, let heard):
+                results[0] = try audio(batch[0], pieces: pieces, duration: duration, heard: heard)
+            case .video(let frames, let sound, let duration, let heard):
+                results[0] = try video(batch[0], frames: frames, sound: sound, duration: duration, heard: heard)
             case .code(let code):
                 results[0] = try self.code(batch[0], code)
+            case .speech(let heard):
+                results[0] = try listened(batch[0], heard)
             }
         } catch let error as WorkerError {
             throw error
@@ -484,6 +497,8 @@ public final class Indexer {
             throw error
         } catch {
             if let step = prepared.step { return [try stopReading(batch[0], at: step.lowerBound, because: "\(error)")] }
+            // The recording stays as it was indexed: frames and sound windows, and anything heard before.
+            if case .speech = prepared.payload { return [("unavailable", "\(error)")] }
             for (slot, file) in batch.enumerated() where prepared.outcomes[slot] == nil {
                 try store.finish(file.id, state: "failed", detail: "\(error)")
                 results[slot] = ("failed", "\(error)")
@@ -666,24 +681,30 @@ public final class Indexer {
                 + (worded.count < code.pieces.count ? ", \(code.pieces.count - worded.count) for keywords only" : ""))
     }
 
-    private func audio(_ file: FileRecord, pieces: [MediaPiece], duration: Double) throws -> (String, String?) {
+    private func audio(_ file: FileRecord, pieces: [MediaPiece], duration: Double, heard: Heard) throws
+        -> (String, String?) {
         guard !pieces.isEmpty else {
             try store.finish(file.id, state: "skipped", detail: "silent or shorter than 2 s")
             return ("skipped", "silent or too short")
         }
         let vectors = try fullWorker().embedAudio(pieces.map(\.path))
+        let said = try embed(heard.lines, of: file)
         try store.db.transaction {
             for (piece, embedding) in zip(pieces, vectors) {
                 try store.addSegment(file: file.id, kind: .audio, modality: .audio, loc: piece.start, locEnd: piece.end,
                                      vector: embedding.vector)
             }
-            try store.finish(file.id, state: "done", info: ["duration": String(format: "%.1f", duration)])
+            try add(heard.lines, said, to: file)
+            var info = ["duration": String(format: "%.1f", duration)]
+            heard.note(in: &info)
+            try store.finish(file.id, state: "done", info: info)
         }
-        return ("done", "\(pieces.count) windows, \(Int(duration)) s")
+        if heard == .unavailable { triedSpeech.insert(file.id) }
+        return ("done", "\(pieces.count) windows, \(Int(duration)) s" + Self.spoken(heard))
     }
 
-    private func video(_ file: FileRecord, frames: [MediaPiece], sound: [MediaPiece], duration: Double) throws
-        -> (String, String?) {
+    private func video(_ file: FileRecord, frames: [MediaPiece], sound: [MediaPiece], duration: Double, heard: Heard)
+        throws -> (String, String?) {
         guard !frames.isEmpty || !sound.isEmpty else {
             try store.finish(file.id, state: "skipped", detail: "no frames or sound")
             return ("skipped", "no frames or sound")
@@ -691,6 +712,7 @@ public final class Indexer {
         let worker = try fullWorker()
         let frameVectors = try worker.embedImages(frames.map(\.path), budget: options.frameBudget)
         let soundVectors = try worker.embedAudio(sound.map(\.path))
+        let said = try embed(heard.lines, of: file)
         try store.db.transaction {
             for (frame, embedding) in zip(frames, frameVectors) {
                 try store.addSegment(file: file.id, kind: .frame, modality: .image, loc: frame.start,
@@ -700,9 +722,101 @@ public final class Indexer {
                 try store.addSegment(file: file.id, kind: .audio, modality: .audio, loc: piece.start,
                                      locEnd: piece.end, vector: embedding.vector)
             }
-            try store.finish(file.id, state: "done", info: ["duration": String(format: "%.1f", duration),
-                                                            "frames": "\(frames.count)", "sound_windows": "\(sound.count)"])
+            try add(heard.lines, said, to: file)
+            var info = ["duration": String(format: "%.1f", duration), "frames": "\(frames.count)",
+                        "sound_windows": "\(sound.count)"]
+            heard.note(in: &info)
+            try store.finish(file.id, state: "done", info: info)
         }
-        return ("done", "\(frames.count) frames, \(sound.count) sound windows, \(Int(duration)) s")
+        if heard == .unavailable { triedSpeech.insert(file.id) }
+        return ("done", "\(frames.count) frames, \(sound.count) sound windows, \(Int(duration)) s" + Self.spoken(heard))
+    }
+
+    // MARK: What's said in recordings
+
+    /// Recordings that came back `unavailable` in this process (no model for their language, and no download): tried
+    /// again by the next one, not over and over by this one.
+    private var triedSpeech = Set<Int64>()
+
+    /// The recordings the listening pass would transcribe: indexed before `Speech` came (or by an older version of it),
+    /// and not tried in this process already. None when it's turned off or this Mac can't transcribe.
+    public func unheard() throws -> [FileRecord] {
+        guard options.speech, !options.code, Speech.isAvailable else { return [] }
+        return try store.unheard(version: Speech.version).filter { !triedSpeech.contains($0.id) }
+    }
+
+    /// The listening pass: transcribes recordings indexed before (`unheard`), one at a time, in indexing order, and adds
+    /// what's said in them to their frames and sound windows (nothing else is embedded again). Each is saved on its own,
+    /// so stopping between them (`shouldStop`) loses nothing. The states: "heard", "none" (nothing said), "unreadable",
+    /// "unavailable" (can't transcribe now: the next process tries again).
+    @discardableResult
+    public func listen(shouldStop: () -> Bool = { false }, onEvent: (Event) -> Void = { _ in }) throws
+        -> [String: Int] {
+        let queue = try unheard()
+        var states: [String: Int] = [:]
+        try process(queue.map { Job(files: [$0], listen: true) }, shouldStop: shouldStop) { index, job, results, seconds in
+            let (state, note) = results[0]
+            states[state, default: 0] += 1
+            onEvent(Event(done: index + 1, total: queue.count, path: job.files[0].path, kind: job.files[0].kind,
+                          state: state, seconds: seconds, note: note))
+        }
+        return states
+    }
+
+    /// A recording indexed before, listened to (`listen`): what's said in it replaces what was heard before (an older
+    /// `Speech`), and its frames, sound windows, state and detail stay as they are. One that changed on disk meanwhile
+    /// (queued again) is left alone: it's indexed again, sound and all.
+    private func listened(_ file: FileRecord, _ heard: Heard) throws -> (String, String?) {
+        triedSpeech.insert(file.id)
+        switch heard {
+        case .off: return ("off", nil)
+        case .unavailable:
+            var info = try store.info(of: file.id)
+            heard.note(in: &info)
+            try store.setInfo(file.id, info, ifState: "done")
+            return ("unavailable", nil)
+        case .unreadable, .nothing, .said: break
+        }
+        let said = try embed(heard.lines, of: file)
+        try store.db.transaction {
+            guard try store.state(of: file.id) == "done" else { return }
+            try store.deleteSegments(of: file.id, kind: .speech)
+            try add(heard.lines, said, to: file)
+            var info = try store.info(of: file.id)
+            heard.note(in: &info)
+            try store.setInfo(file.id, info, ifState: "done")
+        }
+        switch heard {
+        case .said(let lines, let language): return ("heard", "\(lines.count) spoken lines (\(language))")
+        case .unreadable: return ("unreadable", nil)
+        default: return ("none", nil)
+        }
+    }
+
+    /// Vectors for the spoken lines that have words (not just numbers), by line, the file's name as their title.
+    private func embed(_ lines: [SpokenLine], of file: FileRecord) throws -> [Int: [Float]] {
+        let worded = lines.indices.filter { SearchText.hasWords(lines[$0].text) }
+        guard !worded.isEmpty else { return [:] }
+        let title = URL(fileURLWithPath: file.path).deletingPathExtension().lastPathComponent
+        let vectors = try fullWorker().embedTexts(worded.map { Prompts.document(title: title, text: lines[$0].text) })
+        return Dictionary(uniqueKeysWithValues: zip(worded, vectors))
+    }
+
+    /// The spoken lines as `speech` segments: from when to when (seconds), for meaning and keyword search.
+    private func add(_ lines: [SpokenLine], _ vectors: [Int: [Float]], to file: FileRecord) throws {
+        for (index, line) in lines.enumerated() {
+            try store.addSegment(file: file.id, kind: .speech, modality: .text, loc: line.start, locEnd: line.end,
+                                 excerpt: excerpt(line.text), text: line.text, vector: vectors[index])
+        }
+    }
+
+    /// For a recording's note: ", 37 spoken lines (es_ES)".
+    private static func spoken(_ heard: Heard) -> String {
+        switch heard {
+        case .said(let lines, let language): ", \(lines.count) spoken lines (\(language))"
+        case .nothing: ", nothing said"
+        case .unreadable: ", speech unreadable"
+        case .off, .unavailable: ""
+        }
     }
 }

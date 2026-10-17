@@ -13,10 +13,11 @@ let usage = """
     biblo: search your files by meaning (Biblo developer CLI)
 
       biblo estimate <folder>... [--json]     what would be indexed, and how long the first pass takes
-      biblo index <folder>... [--limit N]     sync the index with these folders, embed what's new, then the rest
-                                              of long PDFs and documents
+      biblo index <folder>... [--limit N]     sync the index with these folders, embed what's new, then what's said
+                                              in recordings indexed before and the rest of long PDFs and documents
       biblo search <words>... [--kind K,K] [-n 10] [--json]
                                               "code: <words>" searches the code index
+      biblo listen <recording>...             what's said in it, line by line with times (macOS 26, on this Mac)
       biblo status                            what's in the index
       biblo eval <queries.json> [-n 10]       recall of known answers (see evals/; "code: …" queries search code)
       biblo index-service <folder>... [--docs-only DIR]... [--code-root DIR]... [--code-exclude DIR]... [--backfill]
@@ -187,6 +188,7 @@ func location(_ hit: SearchHit) -> String {
     case .lines: hit.loc.map { "lines \(Int($0))–\(Int(hit.locEnd ?? $0))" + (hit.focus.map { ", opens at \(Int($0))" } ?? "") } ?? ""
     case .cells: hit.loc.map { $0 == hit.locEnd ? "cell \(Int($0))" : "cells \(Int($0))–\(Int(hit.locEnd ?? $0))" } ?? ""
     case .ocr: "text in image"
+    case .speech: hit.loc.map { "said at \(clock($0))" } ?? ""
     default: ""
     }
 }
@@ -318,8 +320,20 @@ func index(_ args: Arguments) throws {
     } else {
         print("done in \(duration(Date().timeIntervalSince(started))): " + statesLine(states))
     }
-    // The rest of long files, as the app does once nothing is pending (not after a --limit run: things still are).
-    guard limit == nil, try store.unfinishedCount().files > 0 else { return }
+    // What's said in recordings indexed before transcription came, then the rest of long files, as the app does once
+    // nothing is pending (not after a --limit run: things still are).
+    guard limit == nil else { return }
+    if try !indexer.unheard().isEmpty {
+        started = Date()
+        let heard = try indexer.listen(onEvent: { event in
+            let name = (event.path as NSString).lastPathComponent
+            let note = event.note.map { "  (\($0))" } ?? ""
+            print("[listen \(lpad("\(event.done)", 4))/\(event.total)] \(pad(event.kind.rawValue, 5)) "
+                  + "\(pad(event.state, 11)) " + String(format: "%5.2fs  ", event.seconds) + name + note)
+        })
+        print("what's said in recordings in \(duration(Date().timeIntervalSince(started))): " + statesLine(heard))
+    }
+    guard try store.unfinishedCount().files > 0 else { return }
     started = Date()
     let finished = try indexer.finishLongFiles(onStep: { step in
         let name = (step.path as NSString).lastPathComponent
@@ -333,6 +347,26 @@ func index(_ args: Arguments) throws {
 
 func statesLine(_ states: [String: Int]) -> String {
     states.sorted { $0.key < $1.key }.map { "\($0.value) \($0.key)" }.joined(separator: " · ")
+}
+
+/// `biblo listen <file>...`: what's said in recordings, line by line with its time, as indexing would store it.
+func listen(_ args: Arguments) throws {
+    guard !args.positional.isEmpty else { throw CLIError("listen: which recordings?") }
+    for path in args.positional {
+        let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+        let started = Date()
+        let heard = try Speech.transcript(of: url)
+        let took = String(format: "%.2f s", Date().timeIntervalSince(started))
+        if args.positional.count > 1 { print("\n\(tilde(url.path))") }
+        switch heard {
+        case .said(let lines, let language):
+            print("\(lines.count) lines in \(language), \(took)")
+            for line in lines { print("[\(clock(line.start))–\(clock(line.end))] \(line.text)") }
+        case .nothing: print("nothing said (\(took))")
+        case .unreadable: print("can't decode the sound")
+        case .unavailable, .off: print("can't transcribe on this Mac")
+        }
+    }
 }
 
 /// Embeds queries with the text model alone (0.3B params, ~0.25 GB): the query encoder. `prompt`: the search's
@@ -558,6 +592,7 @@ do {
     case "search": try search(args)
     case "status": try status(args)
     case "eval": try evaluate(args)
+    case "listen": try listen(args)
     case "index-service": exit(try indexService(args))
     case "worker": exit(workerService(args))
     default:

@@ -199,6 +199,17 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = {
   dependsOn: [pullRole] // or the first pull fails
 }
 
+// Slow answers, errors and 429s from the model, as in the runbook (CX-147).
+module alerts 'alerts.bicep' = {
+  name: 'alerts'
+  params: {
+    location: location
+    tags: tags
+    token: token
+    logsWorkspaceId: logs.id
+  }
+}
+
 output registryEndpoint string = registry.properties.loginServer
 output projectEndpoint string = projectEndpoint
 output modelName string = model.name
