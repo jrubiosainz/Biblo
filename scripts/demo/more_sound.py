@@ -297,11 +297,14 @@ def more_podcasts() -> None:
 
 
 def more_calls() -> None:
+    # She stops for breath around the code, so the transcript has it on a line of its own: what a search lands on.
     voicemail = out("Audio/Voicemail – IT service desk.m4a")
     conversation([("I", "Hi Lucía, this is Megan from the IT service desk, about your ticket for a new laptop. Good "
-                        "news: it's ready. We left it in locker fourteen, on the third floor, next to the kitchen. "
-                        "The code for the locker is four, four, seven, one. Once you've moved your files, please "
-                        "bring the old laptop back to the IT desk before Friday. Thanks, and have a nice afternoon.")],
+                        "news: it's ready. We left it in locker fourteen, on the third floor, next to the "
+                        "kitchen.", 1.5),
+                  ("I", "The code for the locker is four, four, seven, one.", 1.6),
+                  ("I", "Once you've moved your files, please bring the old laptop back to the IT desk before Friday. "
+                        "Thanks, and have a nice afternoon.")],
                  {"I": TESSA}, voicemail)
     phone(voicemail)
 
@@ -342,8 +345,8 @@ def more_calls() -> None:
                         "hundred grams lighter than the previous model. It sleeps three, and it goes up in three "
                         "minutes with color-coded poles and clips. The price is two hundred and forty-nine euros, and "
                         "it launches on November third, in two colors: forest green and sand. The fly is made from "
-                        "recycled polyester, so mention that too. And no claims about being the lightest tent on the "
-                        "market. The legal team said no.")],
+                        "recycled polyester, so mention that too.", 1.6),
+                  ("C", "And no claims about being the lightest tent on the market. The legal team said no.")],
                  {"C": TESSA}, out("Audio/Voice memo – Trailhead 3 launch page.m4a"))
 
     conversation([("A", "Ideas para el taller del miércoles. Uno: la sala Ártico tiene wifi de invitados, pero la "

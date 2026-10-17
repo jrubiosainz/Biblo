@@ -2,9 +2,10 @@
 """Makes the made half of Biblo's demo files, in Resources/Demo.noindex. Run it with scripts/make-demo.sh.
 
 Everything in them is generic: public facts about Microsoft Foundry, Fabric and Copilot, the fictitious Contoso, and
-made-up numbers. Pictures are HTML drawn by a headless Edge or Chrome, voices are macOS's `say`, videos ffmpeg, decks
-python-pptx, Word and RTF files textutil. The text and code files next to them are written by hand and left alone,
-but every file gets its date from DATES (a demo where everything is from today looks like one).
+made-up numbers. Pictures are HTML drawn by a headless Edge or Chrome, voices are macOS's `say` or Azure AI Speech
+(see TTS), videos ffmpeg, decks python-pptx, Word and RTF files textutil. The text and code files next to them are
+written by hand and left alone, but every file gets its date from DATES (a demo where everything is from today looks
+like one).
 
 Logos (scripts/demo/assets, see its SOURCES.md) appear only as their owners allow: whole, unaltered and unanimated, in
 documents, diagrams and slides; never recolored, distorted, given effects or used as Biblo's own."""
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import html
 import io
 import itertools
@@ -24,6 +26,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -46,6 +50,12 @@ ASSETS = HERE / "assets"
 MADE = {".pdf", ".docx", ".rtf", ".pptx", ".png", ".jpg", ".m4a", ".mp4", ".mov"}
 FFMPEG = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
 WORK = Path(tempfile.mkdtemp(prefix="biblo-demo-"))
+# Who speaks: macOS's `say`, or with BIBLO_TTS=azure, Azure AI Speech (AZURE_SPEECH_KEY and AZURE_SPEECH_REGION, of
+# any Speech or AI Services resource). macOS's licence keeps its voices to personal, non-commercial use, so samples
+# that are going to be shown in public, in a post or a talk, speak with Azure's. Its takes stay in TTS_CACHE: a line
+# said before costs nothing the next time, and sounds the same.
+TTS = os.environ.get("BIBLO_TTS", "say")
+TTS_CACHE = Path.home() / ".cache" / "biblo-demo-tts"
 BROWSER = ""
 BUILDERS: dict[str, callable] = {}
 _pages = itertools.count()
@@ -192,9 +202,58 @@ pointer-events:none}}
 # MARK: Sound and video
 
 
+# The Azure AI Speech voice that stands in for each macOS one: the same language, accent and gender.
+AZURE_VOICES = {
+    ("Samantha", "en_US"): "en-US-AvaNeural", ("Daniel", "en_GB"): "en-GB-RyanNeural",
+    ("Karen", "en_AU"): "en-AU-NatashaNeural", ("Moira", "en_IE"): "en-IE-EmilyNeural",
+    ("Tessa", "en_ZA"): "en-ZA-LeahNeural", ("Rishi", "en_IN"): "en-IN-PrabhatNeural",
+    ("Aman", "en_IN"): "en-IN-AaravNeural", ("Mónica", "es_ES"): "es-ES-ElviraNeural",
+    ("Paulina", "es_MX"): "es-MX-DaliaNeural", ("Reed", "es_ES"): "es-ES-AlvaroNeural",
+    ("Eddy", "es_ES"): "es-ES-DarioNeural",
+}
+SAY_WPM = 175   # the pace a `rate` (words a minute, as `say -r` takes it) is measured against for Azure's voices
+
+
 def say(text: str, voice: str, rate: int | None = None) -> Path:
+    if TTS == "azure":
+        return azure_say(text, voice, rate)
     path = WORK / f"voice{next(_pages)}.aiff"
     run("say", "-v", voice, *(["-r", rate] if rate else []), "-o", path, text)
+    return path
+
+
+def azure_say(text: str, voice: str, rate: int | None) -> Path:
+    """`text` said by an Azure AI Speech voice, from TTS_CACHE when it has been said before."""
+    words = html.escape(text, quote=False)
+    if rate:
+        words = f'<prosody rate="{round((rate / SAY_WPM - 1) * 100):+d}%">{words}</prosody>'
+    ssml = (f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{voice[:5]}">'
+            f'<voice name="{voice}">{words}</voice></speak>')
+    take = TTS_CACHE / f"{hashlib.sha256(ssml.encode()).hexdigest()[:32]}.wav"
+    if not take.exists():
+        key, region = os.environ.get("AZURE_SPEECH_KEY"), os.environ.get("AZURE_SPEECH_REGION")
+        if not key or not region:
+            sys.exit("BIBLO_TTS=azure needs AZURE_SPEECH_KEY and AZURE_SPEECH_REGION")
+        request = urllib.request.Request(
+            f"https://{region}.tts.speech.microsoft.com/cognitiveservices/v1", data=ssml.encode(), method="POST",
+            headers={"Ocp-Apim-Subscription-Key": key, "Content-Type": "application/ssml+xml",
+                     "X-Microsoft-OutputFormat": "riff-24khz-16bit-mono-pcm", "User-Agent": "biblo-make-demo"})
+        for attempt in range(6):
+            try:
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    audio = response.read()
+                break
+            except (urllib.error.URLError, TimeoutError) as error:
+                status = getattr(error, "code", None)
+                if attempt == 5 or (status is not None and status != 429 and status < 500):
+                    sys.exit(f"Azure AI Speech couldn't say “{text[:50]}…”: {status or error}")
+                time.sleep(2 ** attempt)   # too many requests, or a hiccup: wait, a little longer each time
+        TTS_CACHE.mkdir(parents=True, exist_ok=True)
+        partial = take.with_suffix(".part")
+        partial.write_bytes(audio)
+        partial.replace(take)
+    path = WORK / f"voice{next(_pages)}.wav"
+    shutil.copyfile(take, path)
     return path
 
 
@@ -1083,11 +1142,19 @@ def ripples(count: int) -> str:
 
 def explainer(script: list, css: str, motif, foot: str, speaker: tuple[str, str], rate: int, target: float,
               path: Path) -> None:
-    """A narrated explainer, about `target` seconds long: every slide stays on while its line is spoken."""
-    voices = [say(slide[-1], voice(*speaker), rate) for slide in script]
-    spoken = [seconds(v) for v in voices]
-    fade = 0.5
-    pad = min(max((target - fade - sum(spoken)) / len(script), 0.45), 1.6)
+    """A narrated explainer, about `target` seconds long and never longer: every slide stays on while its line is
+    spoken, and a voice too slow for the clock is sped up until it fits."""
+    fade, tightest = 0.5, 0.45
+    budget = target - fade - len(script) * tightest - 0.1
+    for _ in range(4):
+        voices = [say(slide[-1], voice(*speaker), rate) for slide in script]
+        spoken = [seconds(v) for v in voices]
+        if sum(spoken) <= budget:
+            break
+        rate = math.ceil(rate * sum(spoken) / budget)
+    else:
+        sys.exit(f"{path.name}: {sum(spoken):.1f} s of narration don't fit in {target} s")
+    pad = min(max((target - fade - sum(spoken)) / len(script), tightest), 1.6)
     images, start = [], 0.0
     for index, (kicker, title, line, chips, _) in enumerate(script):
         tags = "".join(f'<span class="chip">{esc(chip)}</span>' for chip in chips)
@@ -1116,7 +1183,12 @@ _voices: list[tuple[str, str]] = []
 
 
 def voice(name: str, locale: str) -> str:
-    """A macOS voice by its name and locale: their full names are in the Mac's language ("Reed (Spanish (Spain))")."""
+    """A macOS voice by its name and locale: their full names are in the Mac's language ("Reed (Spanish (Spain))").
+    With BIBLO_TTS=azure, the Azure AI Speech voice standing in for it."""
+    if TTS == "azure":
+        if (name, locale) not in AZURE_VOICES:
+            sys.exit(f"no Azure voice stands in for {name} ({locale}): add one to AZURE_VOICES")
+        return AZURE_VOICES[name, locale]
     if not _voices:
         for line in run("say", "-v", "?").splitlines():
             if match := re.match(r"(.+?)\s+([a-z]{2}_[A-Z]{2})\s+#", line):
@@ -1128,9 +1200,11 @@ def voice(name: str, locale: str) -> str:
              "System voice → Manage Voices…")
 
 
-def conversation(lines: list[tuple[str, str]], voices: dict[str, tuple[str, str]], path: Path,
+def conversation(lines: list[tuple], voices: dict[str, tuple[str, str]], path: Path,
                  pause: float = 0.45) -> None:
-    parts = [(say(text, voice(*voices[who])), pause) for who, text in lines]
+    """Lines said one after the other: (who, text), or (who, text, pause) for a longer breath after one. Over 1.2 s,
+    Biblo's transcript starts a new line there (Speech.lines), so what's said next doesn't blur what came before."""
+    parts = [(say(text, voice(*voices[who])), rest[0] if rest else pause) for who, text, *rest in lines]
     join_audio(parts, path)
 
 

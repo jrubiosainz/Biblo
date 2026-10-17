@@ -8,12 +8,16 @@
 #
 # The text and code files are written by hand and kept as they are. This makes everything else again (PDF, Word, RTF,
 # PowerPoint, PNG, JPEG, M4A, MP4) with scripts/demo/make_demo.py: pictures are HTML drawn by a headless Edge or
-# Chrome, voices are macOS's `say`, videos ffmpeg, decks python-pptx, Word and RTF files textutil.
-# macOS's voices never say a line quite the same way twice, so what Biblo hears in a recording changes every time it's
-# made: after making audio or video again, check each one with `biblo listen <file>` and keep a take that's heard right.
+# Chrome, voices are macOS's `say` or Azure AI Speech, videos ffmpeg, decks python-pptx, Word and RTF files textutil.
+# macOS's voices are for personal, non-commercial use: samples you'll show in public, in a post or a talk, should speak
+# with Azure AI Speech's neural voices (BIBLO_TTS=azure, with the key and region of any Speech or AI Services
+# resource). Azure's takes are kept in ~/.cache/biblo-demo-tts, so a line sounds the same every time it's made; macOS's
+# voices never say it quite the same way twice. Either way, after making audio or video again, check what Biblo hears
+# in each one with `biblo listen <file>`.
 #
 #   scripts/make-demo.sh              everything
 #   scripts/make-demo.sh slides …     only what's named (see make_demo.py --help)
+#   BIBLO_TTS=azure AZURE_SPEECH_KEY=… AZURE_SPEECH_REGION=westeurope scripts/make-demo.sh audio videos more_audio more_videos
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 command -v ffmpeg >/dev/null || { echo "needs ffmpeg (brew install ffmpeg)" >&2; exit 1; }

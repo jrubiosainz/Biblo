@@ -134,10 +134,21 @@ inventadas. En macOS 26, lo que se dice en las grabaciones también se encuentra
 de la taquilla» o «qué es RAG».
 
 En git solo están los textos y el código escritos a mano, en `Resources/Demo.noindex`: las condiciones de uso de los
-logos de Microsoft y GitHub y la licencia de las voces de macOS limitan volver a publicar el resto. Lo genera
-`scripts/make-demo.sh`, que necesita ffmpeg, Edge o Chrome, las voces de macOS que usa (si falta alguna, dice cuál y
-dónde descargarla) y los logos oficiales (se descargan como indica `scripts/demo/assets/SOURCES.md`), y `./build.sh` lo
-mete en la app. Los logos aparecen sin alterar, como piden sus guías de marca: revísalas antes de publicar nada.
+logos de Microsoft y GitHub y las de las voces limitan volver a publicar el resto. Lo genera `scripts/make-demo.sh`, que
+necesita ffmpeg, Edge o Chrome, unas voces y los logos oficiales (se descargan como indica
+`scripts/demo/assets/SOURCES.md`), y `./build.sh` lo mete en la app. Por defecto habla con las voces de macOS (si falta
+alguna, dice cuál y dónde descargarla), pero su licencia solo permite un uso personal y no comercial: si vas a enseñar
+la demo en público, en redes o en una charla, genera el audio y el vídeo con las voces neuronales de Azure AI Speech,
+con la clave y la región de cualquier recurso de Speech o de AI Services:
+
+```sh
+BIBLO_TTS=azure AZURE_SPEECH_KEY=… AZURE_SPEECH_REGION=westeurope \
+  scripts/make-demo.sh audio videos more_audio more_videos
+```
+
+Cuesta menos de un dólar, y cada frase se guarda en `~/.cache/biblo-demo-tts`, así que sale igual cada vez. Sean de
+macOS o de Azure, las voces son sintéticas: dilo al publicar. Los logos aparecen sin alterar, como piden sus guías de marca:
+revísalas antes de publicar nada.
 
 ## Instalar
 
