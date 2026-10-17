@@ -45,11 +45,8 @@ struct SearchPanelView: View {
         HStack(spacing: 14) {
             RibbonMark(hang: hang)
                 .frame(width: 24, height: SearchPanelController.fieldHeight, alignment: .top)
-            // With code search on, one example is code's: nothing else in the panel shows "code:".
             SearchField(text: $controller.query, fontSize: 24,
-                        placeholder: controller.model.hasCode
-                            ? "Descríbelo como lo recuerdes: «pingüino en un vídeo», «code: reintentar con espera»…"
-                            : "Descríbelo como lo recuerdes: «receta de paella», «pingüino en un vídeo»…",
+                        placeholder: SearchPlaceholder.text(hasCode: controller.model.hasCode),
                         label: "Buscar") {
                 controller.field = $0
             }
@@ -456,6 +453,21 @@ final class FileDragView: NSView, NSDraggingSource {
                          sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
         // Copy, never move: dropping a result into a Finder folder must not take it away from where it lives.
         context == .outsideApplication ? [.copy, .generic] : []
+    }
+}
+
+/// What the search field suggests typing, in the panel and the window. With code search on, one example is code's:
+/// nothing else in the panel shows "code:". Demo mode's are about the sample files, so they find something there.
+enum SearchPlaceholder {
+    static func text(hasCode: Bool) -> String {
+        let examples: String
+        switch (AppSettings.demo, hasCode) {
+        case (false, true): examples = "«pingüino en un vídeo», «code: reintentar con espera»"
+        case (false, false): examples = "«receta de paella», «pingüino en un vídeo»"
+        case (true, true): examples = "«la cena en Lisboa», «code: reintentar con espera»"
+        case (true, false): examples = "«la cena en Lisboa», «la tarjeta de visita de Tom»"
+        }
+        return "Descríbelo como lo recuerdes: \(examples)…"
     }
 }
 

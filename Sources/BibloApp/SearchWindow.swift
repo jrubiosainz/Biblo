@@ -488,8 +488,7 @@ struct SearchWindowView: View {
     /// Examples of what to type: code's with the Code chip on, and one of them with code search on (as the panel's).
     private var placeholder: String {
         if search.filter == .code { return "Describe el código: «reintentar una petición con espera», un nombre…" }
-        return model.hasCode ? "Descríbelo como lo recuerdes: «pingüino en un vídeo», «code: reintentar con espera»…"
-            : "Descríbelo como lo recuerdes: «receta de paella», «pingüino en un vídeo»…"
+        return SearchPlaceholder.text(hasCode: model.hasCode)
     }
 
     private var resultCount: String {
